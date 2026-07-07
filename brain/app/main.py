@@ -13,28 +13,43 @@ configure_logging()
 log = get_logger(__name__)
 
 
+async def _start_telegram(settings):
+    """Start the Telegram poller if configured. Never lets a bot failure take down the API."""
+    token = (settings.telegram_bot_token or "").strip()
+    if not token:
+        log.info("telegram_disabled_no_token")
+        return None
+
+    log.info("telegram_enabled", allowed_user_count=len(settings.telegram_allowed_ids))
+    try:
+        # Imported lazily so the app runs without python-telegram-bot config in tests.
+        from app.comms.telegram import TelegramChannel
+
+        channel = TelegramChannel(token, settings.telegram_allowed_ids)
+        await channel.start()
+    except Exception as exc:  # noqa: BLE001 — log clearly, keep the API serving.
+        log.error("telegram_start_failed", error=str(exc), error_type=type(exc).__name__)
+        return None
+
+    log.info("telegram_started")
+    return channel
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start/stop the Telegram poller alongside the API (only if a token is configured)."""
     settings = get_settings()
-    channel = None
-    if settings.telegram_bot_token:
-        # Imported lazily so the app runs without python-telegram-bot config in tests.
-        from app.comms.telegram import TelegramChannel
-
-        channel = TelegramChannel(settings.telegram_bot_token, settings.telegram_allowed_ids)
-        await channel.start()
-        log.info("telegram_started")
-    else:
-        log.info("telegram_disabled_no_token")
-
-    app.state.telegram = channel
+    app.state.telegram = await _start_telegram(settings)
     try:
         yield
     finally:
+        channel = app.state.telegram
         if channel is not None:
-            await channel.stop()
-            log.info("telegram_stopped")
+            try:
+                await channel.stop()
+                log.info("telegram_stopped")
+            except Exception as exc:  # noqa: BLE001
+                log.error("telegram_stop_failed", error=str(exc))
 
 
 def create_app() -> FastAPI:

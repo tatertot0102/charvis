@@ -7,6 +7,12 @@ import structlog
 def configure_logging(level: int = logging.INFO) -> None:
     """Configure structlog to emit JSON. Call once at startup."""
     logging.basicConfig(format="%(message)s", level=level)
+
+    # Silence noisy third-party request logs. Critically, python-telegram-bot's httpx client
+    # logs full request URLs at INFO — which include the bot token. Keep those at WARNING so
+    # the token never lands in logs (see security rules: redact credentials from logs).
+    for noisy in ("httpx", "httpcore", "telegram", "apscheduler"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
