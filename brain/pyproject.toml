@@ -14,6 +14,10 @@ dependencies = [
     "structlog>=24.4",
     "httpx>=0.27",
     "python-telegram-bot>=21,<23",
+    "cryptography>=43",
+    "google-auth>=2.35",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.150",
 ]
 
 [dependency-groups]

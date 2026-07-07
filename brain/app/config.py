@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     history_limit: int = 20  # max prior messages sent to the model
 
+    # --- Secrets at rest (Fernet key; required only when an OAuth integration is used) ---
+    secret_encryption_key: str | None = None
+
+    # --- Google (Phase 2A: read-only Calendar) ---
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_oauth_redirect_uri: str = "http://localhost:8000/integrations/google/callback"
+
     @property
     def telegram_allowed_ids(self) -> set[int]:
         return {int(x) for x in self.telegram_allowed_user_ids.split(",") if x.strip()}
