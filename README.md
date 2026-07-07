@@ -4,8 +4,19 @@ A personal secretary you text, backed by a portable FastAPI "brain" in Docker, P
 **local LLM** (later phases). See `CLAUDE.md` for the product spec and `EXECUTION_PLAN.md` for the
 roadmap.
 
-> **Status: Phase 0 — Deploy proof.** An empty, token-protected brain (`/health`) + Postgres,
-> reachable over Tailscale. No chat, LLM, or integrations yet.
+> **Status: Phase 1 — Talk to it.** Token-protected brain with `/health`, `/chat`, and `/capture`;
+> a provider-agnostic local LLM (Ollama by default) reached only via `app.llm.generate`; a Telegram
+> long-polling bot; and persistent conversation history in Postgres. No integrations/dashboard yet.
+
+## Endpoints (Phase 1)
+- `GET /health` — service + DB status (token required)
+- `POST /chat` — `{ "message": "...", "session_id": "default" }` → `{ "reply", "conversation_id" }`
+- `POST /capture` — `{ "text": "..." }` → `{ "id", "status": "captured" }`
+
+## LLM providers
+The app only calls `app.llm.generate(...)`. Switch backends by editing `.env` only:
+`LOCAL_LLM_PROVIDER` = `ollama` (default) | `openai` | `anthropic` | `lmstudio` | `echo`,
+plus `LOCAL_LLM_BASE_URL` and `LOCAL_LLM_MODEL`. Default model: `llama3.2:3b` (fits the 8 GB M1 Pro).
 
 ## Planning docs
 - `EXECUTION_PLAN.md` — architecture, phases, risks, standards

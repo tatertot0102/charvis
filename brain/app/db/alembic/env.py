@@ -9,9 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
 from app.db.base import Base
-
-# Import models here as they are added so autogenerate/metadata sees them.
-# (Phase 0: no models yet.)
+from app.db import models  # noqa: F401 — register models on Base.metadata
 
 config = context.config
 if config.config_file_name is not None:

@@ -76,19 +76,19 @@
 - **Why needed:** the amendment mandates local-only AI behind the provider abstraction.
 - **Where to click / commands:**
   1. Install from https://ollama.com/download (macOS Apple Silicon) — installs a menu-bar app + `ollama` CLI and starts a service on port **11434**.
-  2. Pull a tool-use-capable instruct model sized to the Pro's RAM, e.g.:
-     - `ollama pull qwen2.5:7b-instruct` (or `qwen2.5:14b-instruct` if RAM allows), and
-     - `ollama pull nomic-embed-text` (embeddings for memory).
+  2. Pull the Phase 1 default model (sized for the Pro's **8 GB M1** — do not go larger):
+     - `ollama pull llama3.2:3b`
   3. Confirm it serves: `curl http://localhost:11434/api/tags` lists your models.
-- **Info you need:** the model name(s) you pulled; the Ollama host/port. On the Pro it's `http://localhost:11434` (or `http://host.docker.internal:11434` from inside the container). For **Air dev** pointing at the Pro: `http://<pro-tailscale-ip>:11434` — to allow remote access set the env var `OLLAMA_HOST=0.0.0.0:11434` on the Pro (see MACHINE_SETUP) so it isn't localhost-only.
-- **Where it goes:** `.env` →
+- **Info you need:** the model name (`llama3.2:3b`); the Ollama host/port. On the Pro it's `http://localhost:11434` (the brain container reaches it at `http://host.docker.internal:11434`). For **Air dev** pointing at the Pro: `http://<pro-tailscale-ip>:11434` — to allow remote access set `OLLAMA_HOST=0.0.0.0:11434` on the Pro (see MACHINE_SETUP) so it isn't localhost-only.
+- **Where it goes:** `.env` (these keys already exist in the template) →
   ```
-  LLM_PROVIDER=ollama
-  LLM_BASE_URL=http://host.docker.internal:11434    # Pro; or http://<pro-tailscale-ip>:11434 for Air dev
-  LLM_MODEL=qwen2.5:7b-instruct
-  LLM_EMBED_MODEL=nomic-embed-text
+  LOCAL_LLM_PROVIDER=ollama
+  LOCAL_LLM_BASE_URL=http://host.docker.internal:11434   # Pro; or http://<pro-tailscale-ip>:11434 for Air dev
+  LOCAL_LLM_MODEL=llama3.2:3b
   ```
-- **Verify:** `curl http://<host>:11434/api/generate -d '{"model":"qwen2.5:7b-instruct","prompt":"say hi"}'` streams a response; then in Jarvis, a Telegram message returns a coherent reply.
+  To switch providers later, change only these (e.g. `LOCAL_LLM_PROVIDER=openai` + `OPENAI_API_KEY=...`).
+  No application code references Ollama.
+- **Verify:** `curl http://localhost:11434/api/chat -d '{"model":"llama3.2:3b","messages":[{"role":"user","content":"say hi"}],"stream":false}'` returns a reply; then a Telegram message to Jarvis returns a coherent answer.
 
 ### 1.3 — Shared auth token (💻/🖥️ — you generate it)
 - **Purpose:** protect every brain endpoint even inside Tailscale.
@@ -223,10 +223,9 @@ DB_DSN=postgresql+asyncpg://jarvis:jarvis@db:5432/jarvis   # compose-internal
 # Phase 1
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_USER_IDS=
-LLM_PROVIDER=ollama
-LLM_BASE_URL=http://host.docker.internal:11434
-LLM_MODEL=qwen2.5:7b-instruct
-LLM_EMBED_MODEL=nomic-embed-text
+LOCAL_LLM_PROVIDER=ollama
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_MODEL=llama3.2:3b
 SECRET_ENCRYPTION_KEY=
 # Phase 2
 GOOGLE_CLIENT_ID=
