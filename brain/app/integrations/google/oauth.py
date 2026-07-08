@@ -66,6 +66,13 @@ def _flow(settings: Settings, state: str | None = None) -> Flow:
         scopes=SCOPES,
         redirect_uri=settings.google_oauth_redirect_uri,
         state=state,
+        # This is a confidential web app (holds a client secret), not a public client — PKCE is
+        # unnecessary here and, worse, broken as previously written: build_auth_url() and
+        # exchange_code() each construct a *separate* Flow instance, so the code_verifier
+        # generated for the authorization request never reaches the token exchange, and Google
+        # rejects it with "Missing code verifier". Disable auto-PKCE so no code_challenge is
+        # sent, matching the classic client_secret-authenticated web flow.
+        autogenerate_code_verifier=False,
     )
 
 

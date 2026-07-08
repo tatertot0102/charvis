@@ -12,6 +12,9 @@ from fastapi.responses import HTMLResponse
 from app.deps import require_token
 from app.integrations.google import oauth
 from app.schemas import GoogleConnectResponse
+from app.telemetry import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/integrations/google", tags=["google"])
 
@@ -65,6 +68,14 @@ async def callback(
         )
     except oauth.GoogleOAuthNotConfiguredError as exc:
         return _page("Not configured", str(exc), status_code=503)
+    except Exception as exc:  # noqa: BLE001 — surface a friendly page, log the detail.
+        log.error("google_oauth_callback_failed", error=str(exc))
+        return _page(
+            "Connection failed",
+            "Google rejected the authorization exchange. Re-run /integrations/google/connect "
+            "and try again.",
+            status_code=502,
+        )
     return _page(
         "Connected ✓",
         "Jarvis can now read your Google Calendar. You can close this tab and text “what's my "
