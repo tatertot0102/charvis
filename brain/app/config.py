@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_oauth_redirect_uri: str = "http://localhost:8000/integrations/google/callback"
 
+    # --- Gmail (Phase 2B: read-only) ---
+    gmail_unread_max: int = 20  # max messages returned by unread/today/search endpoints
+    gmail_sync_max_threads: int = 25  # recent threads scanned per sync (bounds API calls)
+    gmail_sync_window_days: int = 14  # how far back a sync looks
+    waiting_followup_days: int = 4  # age after which "waiting on them" recommends a nudge
+
     @property
     def telegram_allowed_ids(self) -> set[int]:
         return {int(x) for x in self.telegram_allowed_user_ids.split(",") if x.strip()}

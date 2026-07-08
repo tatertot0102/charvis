@@ -107,9 +107,10 @@
 
 ## Phase 2 — See my life (read-only)
 
-> **Phase 2A (current) needs ONLY Google Calendar, read-only.** Gmail (2.2) and Drive are later
-> sub-phases — do not enable or scope them yet. The brain requests exactly one scope in Phase 2A:
-> `calendar.readonly`. Nothing here can write, send, delete, or spend.
+> **Phase 2A — Calendar (done).** Requests `calendar.readonly`. See §2.1–2.3.
+> **Phase 2B — Gmail (current).** Adds `gmail.readonly` to the *same* Google client — you must enable
+> the Gmail API and **re-run the connect flow to re-consent** (see §2.3b). Drive stays off until
+> Phase 5. Everything here is read-only: nothing can send, delete, label, or spend.
 
 ### 2.1 — Google Cloud project + OAuth consent screen (any browser)
 - **Purpose:** foundation for Google API access (Phase 2A: Calendar only).
@@ -124,11 +125,13 @@
 - **Where it goes:** nothing yet; this gates the client ID below.
 - **Verify:** consent screen shows status "Testing" with your email listed as a test user.
 
-### 2.2 — Enable the Google Calendar API (same console)
-- **Purpose:** turn on the one API Jarvis calls in Phase 2A.
-- **Where to click:** **APIs & Services → Library** → search **Google Calendar API** → **Enable**.
-  - Gmail API / Drive API are **not** needed for Phase 2A — enable them only when their sub-phase begins.
-- **Verify:** the Calendar API shows "API Enabled" in the Library.
+### 2.2 — Enable the Google APIs (same console)
+- **Purpose:** turn on the APIs Jarvis calls.
+- **Where to click:** **APIs & Services → Library** → search and **Enable** each:
+  - **Google Calendar API** (Phase 2A).
+  - **Gmail API** (Phase 2B) — enable this now for read-only email.
+  - Drive API stays off until Phase 5.
+- **Verify:** both Calendar API and Gmail API show "API Enabled" in the Library.
 
 ### 2.3 — OAuth client credentials — **Web application** (same console)
 - **Purpose:** the client ID/secret the brain uses to run the OAuth flow, plus the **redirect URI**
@@ -168,9 +171,31 @@
      and shows a "Connected ✓" page.
 - **Verify:** `make calendar-today` returns real events (JSON), or text **"what's my day?"** to the
   Telegram bot and get today's schedule. `GET /calendar/today` now returns `"connected": true`.
-- **Scope (least privilege):** Phase 2A requests only `calendar.readonly`. `gmail.readonly` (later
-  Phase 2 sub-step), `gmail.send` (Phase 4), and `drive.*` (Phase 5) each trigger a fresh re-consent
+- **Scope (least privilege):** Phase 2A requests only `calendar.readonly`. `gmail.readonly` is added
+  in Phase 2B (§2.3b); `gmail.send` (Phase 4) and `drive.*` (Phase 5) each trigger a fresh re-consent
   when their phase adds them.
+
+### 2.3b — Phase 2B: Gmail read access (enable API + re-consent) — **required now**
+- **Purpose:** grant Jarvis **read-only** Gmail so it can check email, classify it, and detect
+  what you're waiting on. No send/delete/label — read scope only.
+- **Prerequisite:** you already did §2.1–2.3 for Calendar and connected once. The brain now requests
+  **both** `calendar.readonly` **and** `gmail.readonly` on the same OAuth client, so your existing
+  token (Calendar-only) must be upgraded by re-consenting.
+- **Steps:**
+  1. **Enable the Gmail API** if you haven't (see §2.2): **APIs & Services → Library → Gmail API →
+     Enable**.
+  2. No new client or redirect URI is needed — the same **Web application** client from §2.3 is reused.
+  3. **Re-run the connect flow** so Google prompts for the new scope: `make google-connect` (or send
+     **`/connect_google`** on Telegram) → open the link **on the brain's host** → pick your account →
+     **"Google hasn't verified this app" → Advanced → Go to Jarvis (unsafe)** → now the consent screen
+     lists **both** "See your calendar" **and** "Read your email" → **Allow**.
+  4. The brain overwrites the stored token (same encrypted row) with one covering both scopes.
+- **Verify:** `make gmail-unread` returns JSON with `"connected": true`, or text **"check my email"**
+  / **"anything important?"** / **"what am I waiting on?"** to the Telegram bot and get real results.
+  Until you re-consent, Gmail endpoints return `"connected": false` with a "grant Gmail read access"
+  hint (Calendar keeps working).
+- **Note:** if the consent screen shows only Calendar, you enabled the Gmail API *after* starting the
+  flow — cancel and re-run `make google-connect`.
 
 ### 2.4 — Todoist API token (any browser)
 - **Purpose:** read (Phase 2) and later add/complete (Phase 4) tasks.

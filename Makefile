@@ -27,6 +27,24 @@ calendar-today: ## Fetch today's calendar via the API (uses AUTH_SHARED_TOKEN fr
 		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
 		http://localhost:$${BIND_PORT:-8000}/calendar/today && echo
 
+.PHONY: gmail-unread
+gmail-unread: ## Fetch unread email via the API (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/gmail/unread && echo
+
+.PHONY: gmail-waiting
+gmail-waiting: ## Sync Gmail and show the waiting-on ledger (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/gmail/waiting && echo
+
+.PHONY: gmail-today
+gmail-today: ## Fetch today's email via the API (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/gmail/today && echo
+
 .PHONY: up
 up: ## Build + start brain and db (foreground)
 	$(COMPOSE) up --build

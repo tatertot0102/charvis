@@ -4,25 +4,30 @@ A personal secretary you text, backed by a portable FastAPI "brain" in Docker, P
 **local LLM** (later phases). See `CLAUDE.md` for the product spec and `EXECUTION_PLAN.md` for the
 roadmap.
 
-> **Status: Phase 2A — See my life (read-only Calendar).** Everything from Phase 1, plus a
-> read-only Google Calendar integration: an OAuth connect/callback flow, Fernet-encrypted OAuth
-> tokens in Postgres, `GET /calendar/today`, and a "what's my day?" answer on Telegram. No writes,
-> no Gmail/Todo/Drive, no dashboard yet.
+> **Status: Phase 2B — See my life (read-only Gmail).** Everything from Phase 2A (Calendar), plus a
+> read-only Gmail integration on the *same* Google OAuth: deterministic email classification
+> (importance/urgency/needs-reply/promotional/calendar/deadline/FYI), a waiting-on ledger
+> (who owes whom), a people life-model slice, `GET /gmail/*` endpoints, and natural-language email
+> questions on Telegram ("check my email", "anything important?", "what am I waiting on?", "did X
+> reply?"). **Read-only** — Jarvis never sends, deletes, labels, or modifies email.
 
-## Endpoints (Phase 1 + 2A)
+## Endpoints (Phase 1 + 2A + 2B)
 - `GET /health` — service + DB status (token required)
 - `POST /chat` — `{ "message": "...", "session_id": "default" }` → `{ "reply", "conversation_id" }`
 - `POST /capture` — `{ "text": "..." }` → `{ "id", "status": "captured" }`
-- `GET /integrations/google/connect` — (token) → `{ "auth_url" }`; open it in a browser **on the
-  brain's host** to grant read-only Calendar access
-- `GET /integrations/google/callback` — Google's redirect target (no token; CSRF-guarded by `state`);
-  stores the encrypted refresh token
-- `GET /calendar/today` — (token) → `{ "connected", "timezone", "events": [...] }`; `connected:false`
-  with a hint until you complete the connect flow
+- `GET /integrations/google/connect` — (token) → `{ "auth_url" }`; open on the brain's host to grant
+  read-only Calendar **+ Gmail** access
+- `GET /integrations/google/callback` — Google's redirect target (no token; CSRF-guarded by `state`)
+- `GET /calendar/today` — (token) → today's events; `connected:false` until connected
+- `GET /gmail/unread` · `GET /gmail/today` · `GET /gmail/search?q=…` — (token) → classified messages
+- `GET /gmail/thread/{id}` — (token) → a full thread, classified
+- `GET /gmail/waiting` — (token) → runs a sync, returns `waiting_on_them` / `waiting_on_me`
 
-## Connect Google Calendar (Phase 2A)
-Requires the Google Cloud setup in `EXTERNAL_ACTIONS.md` §2 (Calendar API + a **Web application**
-OAuth client whose redirect URI matches `GOOGLE_OAUTH_REDIRECT_URI`).
+All Gmail endpoints return `connected:false` with a re-consent hint until Gmail scope is granted.
+
+## Connect Google (Calendar + Gmail, read-only)
+Requires the Google Cloud setup in `EXTERNAL_ACTIONS.md` §2 (enable Calendar **and** Gmail APIs + a
+**Web application** OAuth client whose redirect URI matches `GOOGLE_OAUTH_REDIRECT_URI`).
 
 ```bash
 make secret-key                  # copy output into SECRET_ENCRYPTION_KEY in .env (encrypts tokens)
@@ -30,9 +35,17 @@ make secret-key                  # copy output into SECRET_ENCRYPTION_KEY in .en
 docker compose up -d             # restart brain so it reloads .env
 make google-connect              # prints the consent URL — open it in a browser on this machine
 make calendar-today              # after granting: today's events as JSON
+make gmail-unread                # unread email, classified
+make gmail-waiting               # who's waiting on whom
 ```
 
-On Telegram: `/connect_google` returns the consent link; after granting, text **"what's my day?"**.
+The brain requests **both** `calendar.readonly` and `gmail.readonly` on one client. If you connected
+during Phase 2A (Calendar only), **re-run `make google-connect` to re-consent** and grant Gmail — see
+`EXTERNAL_ACTIONS.md` §2.3b.
+
+On Telegram: `/connect_google` returns the consent link; then just ask naturally —
+**"what's my day?"**, **"check my email"**, **"anything important?"**, **"what am I waiting on?"**,
+**"did Sarah reply?"** (no special commands).
 
 ## LLM providers
 The app only calls `app.llm.generate(...)`. Switch backends by editing `.env` only:
@@ -53,7 +66,7 @@ Prereqs: Docker Desktop, Git, and the Phase 0 items in `EXTERNAL_ACTIONS.md` §0
 cp .env.example .env
 make token                       # copy the output into AUTH_SHARED_TOKEN in .env
 make up                          # build + start brain and db
-make migrate                     # apply migrations to head (0003 = oauth_tokens)  [separate terminal]
+make migrate                     # apply migrations to head (0004 = Gmail tables)  [separate terminal]
 make health                      # curl /health with your token
 make test                        # run the smoke test
 ```
@@ -78,7 +91,9 @@ Makefile               dev commands (make help)
 .env.example           config template (never commit .env)
 brain/                 FastAPI app, Dockerfile (uv), Alembic
   app/                 config, telemetry, deps (auth), db, api/, llm/, comms/, conversation/
-    integrations/      google/ (oauth, tokens, calendar — read-only)
+    integrations/      google/ (oauth, tokens, calendar, gmail, classify, sync — read-only)
+    lifemodel/         people (contacts slice of the life model)
+    coordination/      waiting (waiting-on ledger — detection only)
     security/          crypto (Fernet, OAuth tokens at rest)
   tests/               unit + integration (no live Google/LLM calls)
 ```

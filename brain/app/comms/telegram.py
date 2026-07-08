@@ -17,8 +17,9 @@ from app.telemetry import get_logger
 log = get_logger(__name__)
 
 _START_TEXT = (
-    "Jarvis here. Ask “what's my day?” (or /day), use /capture <note> to file a quick "
-    "thought, or /connect_google to link your calendar (read-only)."
+    "Jarvis here. Ask “what's my day?” (or /day) or “check my email / anything important? / what "
+    "am I waiting on?”, use /capture <note> to file a quick thought, or /connect_google to link "
+    "your Google account (read-only Calendar + Gmail)."
 )
 
 

@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app import llm
 from app.config import get_settings
-from app.conversation import intents
+from app.conversation import email_handler, intents
 from app.db.models import Conversation, Message
 from app.db.session import get_session
 from app.integrations.google import calendar
@@ -30,9 +30,12 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         session.add(Message(conversation_id=conversation.id, role="user", content=text))
         await session.flush()
 
-        # Deterministic intents answer directly (no model call). Phase 2A: "what's my day?".
+        # Deterministic intents answer directly (no model call). Phase 2A: calendar; 2B: email.
+        email_intent = intents.detect_email_intent(text)
         if intents.is_todays_schedule_query(text):
             reply = await _todays_schedule_reply()
+        elif email_intent is not None:
+            reply = await email_handler.handle(*email_intent)
         else:
             history = await _load_recent_messages(session, conversation.id, settings.history_limit)
             prompt = [ChatMessage(role="system", content=settings.system_prompt)]

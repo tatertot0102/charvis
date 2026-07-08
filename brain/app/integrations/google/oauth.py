@@ -21,7 +21,10 @@ from app.telemetry import get_logger
 log = get_logger(__name__)
 
 CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
-SCOPES = [CALENDAR_READONLY_SCOPE]
+GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+# Both Google connectors share ONE credential/consent (no auth duplication). Adding a scope here
+# means the operator must re-run the connect flow to re-consent (see EXTERNAL_ACTIONS.md §2).
+SCOPES = [CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE]
 
 _AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
 _TOKEN_URI = "https://oauth2.googleapis.com/token"

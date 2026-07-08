@@ -247,6 +247,24 @@ the next until the current is manually verified.**
 read, Gmail read, `/state/today`, morning briefing). Everything write-related is post-MVP. See
 `MVP.md`.
 
+**Phase 2 is shipped in read-only sub-phases (one deployable increment each):**
+- **2A — Calendar (done):** Google OAuth (Web-app client, Fernet-encrypted tokens), read-only
+  Calendar connector, `GET /calendar/today`, "what's my day?" on Telegram. Migration `0003`.
+- **2B — Gmail (done):** `gmail.readonly` added to the same client; read-only Gmail connector
+  (unread/today/search/thread); **deterministic** classification (importance, urgency,
+  requires-response, promotional, calendar/deadline-related, FYI) stored in `email_messages`;
+  **waiting-on ledger** (`waiting_items`, detection only — never sends); **people** life-model slice
+  (`people`); `GET /gmail/{unread,today,search,waiting,thread/{id}}`; natural-language email intents
+  on Telegram (no Gmail-specific commands). Migration `0004`. External step: enable Gmail API +
+  re-consent (EXTERNAL_ACTIONS §2.3b).
+- **2C+ (remaining Phase 2):** Todoist read, native agents (mac-agent, chrome-ext, Android ingest),
+  Dashboard **Today** + **Live context**. Deferred from 2B: LLM-based life-model fact extraction
+  (projects/deadlines/commitments) — 2B keeps the deterministic people + waiting slices only.
+
+**Design note (2B):** email classification and intent routing are **deterministic** (Gmail labels +
+thread structure + keyword heuristics), not LLM-based — reliable, free, and unit-testable with
+mocked Gmail. The local model stays reserved for open-ended conversation.
+
 ### Time-per-phase caveat
 Estimates assume one focused engineer + Claude Code, and that external setup (OAuth screens, Tasker,
 device perms) is done promptly when a phase STOPs for it. External setup is the usual schedule risk,
