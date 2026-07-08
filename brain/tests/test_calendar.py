@@ -53,3 +53,43 @@ def test_format_lists_events():
     assert "9:30" in text
     assert "Zoom" in text
     assert "all day" in text
+
+
+# --- Phase 2C: attendee parsing + next-meeting selection ---------------------
+
+
+def test_parse_event_extracts_attendees_excluding_self():
+    raw = {
+        "summary": "ARISE onboarding",
+        "id": "evt1",
+        "description": "lab intro",
+        "start": {"dateTime": "2026-07-09T15:00:00-04:00"},
+        "end": {"dateTime": "2026-07-09T16:00:00-04:00"},
+        "attendees": [
+            {"email": "me@example.com", "self": True},
+            {"email": "PRIYA@arise.org"},
+            {"email": "room-200@resource.calendar.google.com", "resource": True},
+        ],
+    }
+    event = calendar._parse_event(raw, TZ)
+    assert event.event_id == "evt1"
+    assert event.description == "lab intro"
+    assert event.attendees == ("priya@arise.org",)  # lowercased, self + resource excluded
+
+
+def test_next_timed_event_skips_all_day_and_past():
+    now = datetime(2026, 7, 9, 12, 0, tzinfo=TZ)
+    past = calendar.CalendarEvent("Done", datetime(2026, 7, 9, 9, 0, tzinfo=TZ),
+                                  datetime(2026, 7, 9, 10, 0, tzinfo=TZ), False, None)
+    allday = calendar.CalendarEvent("Holiday", datetime(2026, 7, 9, 0, 0, tzinfo=TZ),
+                                    datetime(2026, 7, 10, 0, 0, tzinfo=TZ), True, None)
+    upcoming = calendar.CalendarEvent("Meeting", datetime(2026, 7, 9, 15, 0, tzinfo=TZ),
+                                      datetime(2026, 7, 9, 16, 0, tzinfo=TZ), False, None)
+    assert calendar.next_timed_event([past, allday, upcoming], now=now).summary == "Meeting"
+
+
+def test_next_timed_event_returns_none_when_all_past():
+    now = datetime(2026, 7, 9, 18, 0, tzinfo=TZ)
+    past = calendar.CalendarEvent("Done", datetime(2026, 7, 9, 9, 0, tzinfo=TZ),
+                                  datetime(2026, 7, 9, 10, 0, tzinfo=TZ), False, None)
+    assert calendar.next_timed_event([past], now=now) is None

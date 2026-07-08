@@ -98,3 +98,58 @@ class WaitingResponse(BaseModel):
     waiting_on_them: list[WaitingItemOut] = Field(default_factory=list)
     waiting_on_me: list[WaitingItemOut] = Field(default_factory=list)
     detail: str | None = None
+
+
+# --- Phase 2C: unified intelligence / state ---
+
+
+class StateTodayResponse(BaseModel):
+    connected: bool
+    timezone: str
+    events: list[CalendarEventOut] = Field(default_factory=list)
+    waiting_on_me_count: int = 0
+    waiting_on_them_count: int = 0
+    summary: str = ""  # human-readable one-line overview of the day
+    detail: str | None = None
+
+
+class DeadlineOut(BaseModel):
+    source: str  # calendar | email
+    title: str
+    when: str | None = None  # ISO 8601, or null for undated email deadlines
+    detail: str
+    urgency: str  # high | normal | low
+
+
+class DeadlinesResponse(BaseModel):
+    connected: bool
+    deadlines: list[DeadlineOut] = Field(default_factory=list)
+    detail: str | None = None
+
+
+class NextActionResponse(BaseModel):
+    connected: bool
+    recommendation: str = ""
+    detail: str | None = None
+
+
+class RelatedEmailOut(BaseModel):
+    gmail_id: str
+    thread_id: str
+    from_email: str
+    from_name: str | None = None
+    subject: str
+    snippet: str
+    received_at: str | None = None
+    is_unread: bool
+    reason: str  # why it was linked to the event
+
+
+class EventBriefingResponse(BaseModel):
+    connected: bool
+    has_event: bool
+    event: CalendarEventOut | None = None
+    briefing: str = ""  # synthesized natural-language brief
+    related_emails: list[RelatedEmailOut] = Field(default_factory=list)
+    waiting_on_me_count: int = 0
+    detail: str | None = None

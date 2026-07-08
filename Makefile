@@ -45,6 +45,24 @@ gmail-today: ## Fetch today's email via the API (read-only)
 		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
 		http://localhost:$${BIND_PORT:-8000}/gmail/today && echo
 
+.PHONY: state-today
+state-today: ## Unified 'what's my day' — calendar + waiting overview (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/state/today && echo
+
+.PHONY: state-next
+state-next: ## Briefing for your next meeting — combines calendar + related email (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/state/next-meeting && echo
+
+.PHONY: state-deadlines
+state-deadlines: ## Upcoming deadlines from calendar + flagged email (read-only)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/state/deadlines && echo
+
 .PHONY: up
 up: ## Build + start brain and db (foreground)
 	$(COMPOSE) up --build

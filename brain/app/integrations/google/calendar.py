@@ -35,6 +35,9 @@ class CalendarEvent:
     end: datetime  # timezone-aware
     all_day: bool
     location: str | None
+    event_id: str = ""
+    description: str = ""
+    attendees: tuple[str, ...] = ()  # attendee email addresses (lowercased)
 
 
 def _resolve_tz() -> ZoneInfo:
@@ -60,6 +63,16 @@ def _parse_dt(node: dict, tz: ZoneInfo, all_day: bool) -> datetime:
     return datetime.fromisoformat(node["dateTime"])
 
 
+def _parse_attendees(raw: dict) -> tuple[str, ...]:
+    out: list[str] = []
+    for att in raw.get("attendees", []) or []:
+        email = (att.get("email") or "").lower()
+        # Skip the calendar owner ("self") and resource rooms — we want the *other* people.
+        if email and not att.get("self") and not att.get("resource"):
+            out.append(email)
+    return tuple(out)
+
+
 def _parse_event(raw: dict, tz: ZoneInfo) -> CalendarEvent:
     start_node = raw.get("start", {})
     end_node = raw.get("end", {})
@@ -70,6 +83,9 @@ def _parse_event(raw: dict, tz: ZoneInfo) -> CalendarEvent:
         end=_parse_dt(end_node, tz, all_day),
         all_day=all_day,
         location=raw.get("location"),
+        event_id=raw.get("id") or "",
+        description=raw.get("description") or "",
+        attendees=_parse_attendees(raw),
     )
 
 
@@ -102,6 +118,57 @@ async def list_todays_events(account: str = "default") -> list[CalendarEvent]:
     events = [_parse_event(e, tz) for e in raw]
     log.info("calendar_today_fetched", account=account, count=len(events))
     return events
+
+
+def _fetch_upcoming_events(creds: Credentials, tz: ZoneInfo, window_days: int) -> list[dict]:
+    """Timed + all-day events from now through `window_days` ahead. Run via asyncio.to_thread."""
+    now = datetime.now(tz)
+    end = now + timedelta(days=window_days)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    response = (
+        service.events()
+        .list(
+            calendarId=_PRIMARY_CALENDAR,
+            timeMin=now.astimezone(UTC).isoformat(),
+            timeMax=end.astimezone(UTC).isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+            maxResults=MAX_EVENTS,
+        )
+        .execute()
+    )
+    return response.get("items", [])
+
+
+async def list_upcoming_events(
+    account: str = "default", window_days: int = 7
+) -> list[CalendarEvent]:
+    """Return events from now through `window_days` ahead. Raises NotConnectedError if unauthed."""
+    creds = await tokens.load_credentials(account)
+    if creds is None:
+        raise NotConnectedError("Google Calendar is not connected.")
+    tz = _resolve_tz()
+    raw = await asyncio.to_thread(_fetch_upcoming_events, creds, tz, window_days)
+    events = [_parse_event(e, tz) for e in raw]
+    log.info("calendar_upcoming_fetched", account=account, count=len(events))
+    return events
+
+
+def next_timed_event(events: list[CalendarEvent], now: datetime | None = None) -> CalendarEvent | None:
+    """First non-all-day event that hasn't ended yet (events assumed start-sorted). Pure/testable."""
+    reference = now or datetime.now(UTC)
+    for event in events:
+        if event.all_day:
+            continue
+        if event.end > reference:
+            return event
+    return None
+
+
+async def next_meeting(account: str = "default", window_days: int = 7) -> CalendarEvent | None:
+    """The next upcoming timed meeting, or None. Raises NotConnectedError if unauthed."""
+    events = await list_upcoming_events(account, window_days=window_days)
+    return next_timed_event(events)
 
 
 def format_todays_events(events: list[CalendarEvent]) -> str:

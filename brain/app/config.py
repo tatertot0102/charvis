@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     gmail_sync_window_days: int = 14  # how far back a sync looks
     waiting_followup_days: int = 4  # age after which "waiting on them" recommends a nudge
 
+    # --- Unified intelligence (Phase 2C: cross-source context + meeting prep) ---
+    upcoming_window_days: int = 7  # how far ahead "next meeting" / upcoming events looks
+    deadline_window_days: int = 14  # how far ahead deadlines are aggregated
+    event_email_lookback_days: int = 30  # window for finding emails related to an event
+    context_max_related_emails: int = 5  # cap on related emails pulled per event
+
     @property
     def telegram_allowed_ids(self) -> set[int]:
         return {int(x) for x in self.telegram_allowed_user_ids.split(",") if x.strip()}

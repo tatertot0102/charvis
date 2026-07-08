@@ -258,19 +258,23 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
   on Telegram. Migration `0004`. External step: enable Gmail API + re-consent (EXTERNAL_ACTIONS §2.3b).
 
 **Roadmap refinement (post-2B):** Originally Phase 2C was monolithic. Split into smaller, deployable increments:
-- **2C — Unified Intelligence / Meeting Prep:** Combine Calendar + Gmail + waiting-on + people into
-  context-aware replies. `GET /state/today` (calendar + task timeline), `GET /state/waiting` (waiting-on
-  split), `GET /state/deadlines` (upcoming with urgency), `GET /state/next-action` (priority). Calendar
-  event context resolver (find related emails, waiting-on context). Meeting briefing generator. Telegram:
-  "what's my day?", "prep me for my next meeting", "what is this meeting about?", "what am I waiting on?",
-  "what deadlines are coming up?". Migration `0005`.
+- **2C — Unified Intelligence / Meeting Prep (✓ verified):** `ContextResolver` (`app/context/`) reasons
+  across Calendar + Gmail + waiting-on + captures. `GET /state/today` (calendar + waiting overview),
+  `GET /state/waiting` (ledger split), `GET /state/deadlines` (calendar + flagged email, urgency-sorted),
+  `GET /state/next-action` (top recommendation), `GET /state/next-meeting` (synthesized briefing + related
+  emails). Event→email matching by attendee address + title keywords; event→waiting-on by thread id.
+  Briefing prose is **LLM-synthesized with a deterministic template fallback** (so a brief always returns);
+  everything else (matching, deadlines, next-action) is deterministic. Telegram: "prep me for my next
+  meeting", "what is my next meeting about?", "what emails relate to my next event?", "what deadlines are
+  coming up?" (plus 2A "what's my day?" / 2B "what am I waiting on?" still route correctly).
+  **No migration** — 2C is pure read-only aggregation over existing tables + live APIs; nothing persisted.
 - **2D — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
-  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0006`.
+  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0005`.
 - **2E — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
   Today view (timeline), waiting-on view (split), deadlines view (urgency escalation), next-action view.
 - **2F — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
   active window, via launchd), chrome-extension (active tab), android-tasker (location, battery, SMS,
-  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0007`.
+  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0006`.
 
 **Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
 (labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local

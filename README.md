@@ -4,14 +4,15 @@ A personal secretary you text, backed by a portable FastAPI "brain" in Docker, P
 **local LLM** (later phases). See `CLAUDE.md` for the product spec and `EXECUTION_PLAN.md` for the
 roadmap.
 
-> **Status: Phase 2B — See my life (read-only Gmail).** Everything from Phase 2A (Calendar), plus a
-> read-only Gmail integration on the *same* Google OAuth: deterministic email classification
-> (importance/urgency/needs-reply/promotional/calendar/deadline/FYI), a waiting-on ledger
-> (who owes whom), a people life-model slice, `GET /gmail/*` endpoints, and natural-language email
-> questions on Telegram ("check my email", "anything important?", "what am I waiting on?", "did X
-> reply?"). **Read-only** — Jarvis never sends, deletes, labels, or modifies email.
+> **Status: Phase 2C — Unified Intelligence / Meeting Prep.** Everything from 2A (Calendar) + 2B
+> (Gmail), plus a `ContextResolver` that reasons *across* those sources: it links a calendar event
+> to its related Gmail threads, waiting-on items, and your captures, then synthesizes a concise
+> meeting briefing (LLM-written, with a deterministic fallback). Adds `GET /state/{today,waiting,
+> deadlines,next-action,next-meeting}` and Telegram questions like "prep me for my next meeting",
+> "what is my next meeting about?", "what deadlines are coming up?". **Read-only** — no new external
+> integrations; combines the data Jarvis already has.
 
-## Endpoints (Phase 1 + 2A + 2B)
+## Endpoints (Phase 1 + 2A + 2B + 2C)
 - `GET /health` — service + DB status (token required)
 - `POST /chat` — `{ "message": "...", "session_id": "default" }` → `{ "reply", "conversation_id" }`
 - `POST /capture` — `{ "text": "..." }` → `{ "id", "status": "captured" }`
@@ -22,8 +23,13 @@ roadmap.
 - `GET /gmail/unread` · `GET /gmail/today` · `GET /gmail/search?q=…` — (token) → classified messages
 - `GET /gmail/thread/{id}` — (token) → a full thread, classified
 - `GET /gmail/waiting` — (token) → runs a sync, returns `waiting_on_them` / `waiting_on_me`
+- `GET /state/today` — (token) → today's calendar + a waiting-on overview + one-line summary
+- `GET /state/waiting` — (token) → the waiting-on ledger, split by who owes whom
+- `GET /state/deadlines` — (token) → deadlines from calendar events + flagged email, urgency-sorted
+- `GET /state/next-action` — (token) → the single top recommendation across all sources
+- `GET /state/next-meeting` — (token) → synthesized briefing for your next meeting + related emails
 
-All Gmail endpoints return `connected:false` with a re-consent hint until Gmail scope is granted.
+All Gmail/state endpoints return `connected:false` with a re-consent hint until Google is connected.
 
 ## Connect Google (Calendar + Gmail, read-only)
 Requires the Google Cloud setup in `EXTERNAL_ACTIONS.md` §2 (enable Calendar **and** Gmail APIs + a
@@ -45,7 +51,9 @@ during Phase 2A (Calendar only), **re-run `make google-connect` to re-consent** 
 
 On Telegram: `/connect_google` returns the consent link; then just ask naturally —
 **"what's my day?"**, **"check my email"**, **"anything important?"**, **"what am I waiting on?"**,
-**"did Sarah reply?"** (no special commands).
+**"did Sarah reply?"**, and (Phase 2C) **"prep me for my next meeting"**, **"what is my next
+meeting about?"**, **"what emails relate to my next event?"**, **"what deadlines are coming up?"**
+(no special commands).
 
 ## LLM providers
 The app only calls `app.llm.generate(...)`. Switch backends by editing `.env` only:
@@ -92,6 +100,7 @@ Makefile               dev commands (make help)
 brain/                 FastAPI app, Dockerfile (uv), Alembic
   app/                 config, telemetry, deps (auth), db, api/, llm/, comms/, conversation/
     integrations/      google/ (oauth, tokens, calendar, gmail, classify, sync — read-only)
+    context/           resolver + briefing + deadlines (cross-source unified intelligence, 2C)
     lifemodel/         people (contacts slice of the life model)
     coordination/      waiting (waiting-on ledger — detection only)
     security/          crypto (Fernet, OAuth tokens at rest)

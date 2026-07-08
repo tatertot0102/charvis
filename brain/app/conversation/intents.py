@@ -122,3 +122,59 @@ def detect_email_intent(text: str) -> tuple[EmailIntent, str | None] | None:
     if any(phrase in normalized for phrase in _UNREAD_PHRASES):
         return (EmailIntent.UNREAD, None)
     return None
+
+
+# --- Phase 2C: unified-intelligence / meeting-prep intents -------------------
+
+
+class ContextIntent(str, Enum):
+    PREP_MEETING = "prep_meeting"  # prep me for my next meeting → full briefing
+    MEETING_ABOUT = "meeting_about"  # what is my next meeting about → one-liner
+    EVENT_EMAILS = "event_emails"  # what emails relate to my next event → list
+    DEADLINES = "deadlines"  # what deadlines are coming up
+    NEXT_ACTION = "next_action"  # what should I do next / top priority
+
+
+_DEADLINE_PHRASES = (
+    "deadline", "deadlines", "whats due", "what is due", "due soon", "coming up",
+    "whats coming up", "upcoming due", "what do i owe", "time sensitive",
+)
+_PREP_PHRASES = (
+    "prep me", "prepare me", "prep for", "brief me on my", "brief me for", "meeting prep",
+    "get me ready for", "ready for my meeting", "ready for my next", "prep my next",
+)
+_MEETING_ABOUT_PHRASES = (
+    "what is my next meeting about", "whats my next meeting about", "what is this meeting about",
+    "whats this meeting about", "what is my meeting about", "whats my meeting about",
+    "what is the meeting about", "whats the meeting about",
+)
+_EVENT_EMAIL_PHRASES = (
+    "related to my next", "related to my meeting", "related to my event", "about my meeting",
+    "emails for my meeting", "related emails for my", "emails relate to my next",
+    "emails for my next", "emails about my next", "emails about the meeting",
+)
+_NEXT_ACTION_PHRASES = (
+    "what should i do next", "whats my next action", "what is my next action", "next action",
+    "what should i focus on", "top priority", "what matters most", "whats most important right now",
+    "what should i work on",
+)
+
+
+def detect_context_intent(text: str) -> ContextIntent | None:
+    """Map a message to a cross-source context intent, or None to try other routes/the LLM.
+
+    Order matters: the more specific meeting phrasings are checked before the generic ones so
+    "what is my next meeting about" doesn't get swallowed by the prep matcher.
+    """
+    normalized = _normalize(text)
+    if any(phrase in normalized for phrase in _MEETING_ABOUT_PHRASES):
+        return ContextIntent.MEETING_ABOUT
+    if any(phrase in normalized for phrase in _EVENT_EMAIL_PHRASES):
+        return ContextIntent.EVENT_EMAILS
+    if any(phrase in normalized for phrase in _PREP_PHRASES):
+        return ContextIntent.PREP_MEETING
+    if any(phrase in normalized for phrase in _DEADLINE_PHRASES):
+        return ContextIntent.DEADLINES
+    if any(phrase in normalized for phrase in _NEXT_ACTION_PHRASES):
+        return ContextIntent.NEXT_ACTION
+    return None
