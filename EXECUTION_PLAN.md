@@ -248,22 +248,37 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
 `MVP.md`.
 
 **Phase 2 is shipped in read-only sub-phases (one deployable increment each):**
-- **2A — Calendar (done):** Google OAuth (Web-app client, Fernet-encrypted tokens), read-only
+- **2A — Calendar (✓ verified):** Google OAuth (Web-app client, Fernet-encrypted tokens), read-only
   Calendar connector, `GET /calendar/today`, "what's my day?" on Telegram. Migration `0003`.
-- **2B — Gmail (done):** `gmail.readonly` added to the same client; read-only Gmail connector
+- **2B — Gmail (✓ verified):** `gmail.readonly` added to the same client; read-only Gmail connector
   (unread/today/search/thread); **deterministic** classification (importance, urgency,
   requires-response, promotional, calendar/deadline-related, FYI) stored in `email_messages`;
   **waiting-on ledger** (`waiting_items`, detection only — never sends); **people** life-model slice
   (`people`); `GET /gmail/{unread,today,search,waiting,thread/{id}}`; natural-language email intents
-  on Telegram (no Gmail-specific commands). Migration `0004`. External step: enable Gmail API +
-  re-consent (EXTERNAL_ACTIONS §2.3b).
-- **2C+ (remaining Phase 2):** Todoist read, native agents (mac-agent, chrome-ext, Android ingest),
-  Dashboard **Today** + **Live context**. Deferred from 2B: LLM-based life-model fact extraction
-  (projects/deadlines/commitments) — 2B keeps the deterministic people + waiting slices only.
+  on Telegram. Migration `0004`. External step: enable Gmail API + re-consent (EXTERNAL_ACTIONS §2.3b).
 
-**Design note (2B):** email classification and intent routing are **deterministic** (Gmail labels +
-thread structure + keyword heuristics), not LLM-based — reliable, free, and unit-testable with
-mocked Gmail. The local model stays reserved for open-ended conversation.
+**Roadmap refinement (post-2B):** Originally Phase 2C was monolithic. Split into smaller, deployable increments:
+- **2C — Unified Intelligence / Meeting Prep:** Combine Calendar + Gmail + waiting-on + people into
+  context-aware replies. `GET /state/today` (calendar + task timeline), `GET /state/waiting` (waiting-on
+  split), `GET /state/deadlines` (upcoming with urgency), `GET /state/next-action` (priority). Calendar
+  event context resolver (find related emails, waiting-on context). Meeting briefing generator. Telegram:
+  "what's my day?", "prep me for my next meeting", "what is this meeting about?", "what am I waiting on?",
+  "what deadlines are coming up?". Migration `0005`.
+- **2D — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
+  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0006`.
+- **2E — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
+  Today view (timeline), waiting-on view (split), deadlines view (urgency escalation), next-action view.
+- **2F — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
+  active window, via launchd), chrome-extension (active tab), android-tasker (location, battery, SMS,
+  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0007`.
+
+**Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
+(labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local
+model is reserved for open-ended conversation and future Phase 3 life-model reasoning.
+
+**Deferred to Phase 3:** LLM-based life-model fact extraction (projects/deadlines/commitments from content),
+planner (priority model, scheduling, decomposition), autonomy tiers, approval queue. Phase 3 is the "Think"
+phase where Jarvis reasons over the data Phase 2 collects.
 
 ### Time-per-phase caveat
 Estimates assume one focused engineer + Claude Code, and that external setup (OAuth screens, Tasker,

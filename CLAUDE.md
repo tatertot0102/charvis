@@ -270,11 +270,19 @@ the frontend.
   this is done.**
 - **Phase 1 — Talk to it.** Telegram text channel ↔ `/chat` ↔ Claude LLM. It can converse,
   capture one-liners to the DB, and ask clarifying questions. No integrations yet.
-- **Phase 2 — See my life (read-only).** Gmail + Calendar + Todo read connectors; mac-agent
-  + chrome-extension + android ingest. Life model (§5) starts populating. Dashboard **Today**
-  + **Live context** views.
+- **Phase 2 — See my life (read-only connectors).** Starts as Calendar (2A) + Gmail (2B) read,
+  then unified intelligence layer:
+  - **2A (done):** Google Calendar read-only, OAuth flow, `GET /calendar/today`.
+  - **2B (done):** Gmail read-only + classification + waiting-on ledger + people life-model.
+  - **2C — Unified Intelligence:** Combine Calendar + Gmail + waiting-on into context-aware Telegram replies.
+    `/state/today`, `/state/waiting`, `/state/deadlines`, `/state/next-action`. Meeting briefings.
+  - **2D — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
+  - **2E — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
+  - **2F — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).
+    `/ingest/{source}`, `/state/context`.
 - **Phase 3 — Think.** Planner (§6): decomposition, priority model, scheduling into free
-  calendar time, overload detection, daily rundown. Deadlines + Waiting-on dashboard views.
+  calendar time, overload detection, life-model fact extraction (projects/deadlines from content),
+  daily rundown.
 - **Phase 4 — Act (gated).** Autonomy tiers + approval queue (§7). Turn on write actions:
   send email (draft-first), move calendar blocks, add/complete tasks, send texts via agent.
 - **Phase 5 — Secretary polish.** Coordination + follow-up nudges (§8), prep briefings (§9),
