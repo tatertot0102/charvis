@@ -17,7 +17,7 @@ from app.telemetry import get_logger
 log = get_logger(__name__)
 
 _START_TEXT = (
-    "Jarvis here. Text me anything, ask “what's my day?”, use /capture <note> to file a quick "
+    "Jarvis here. Ask “what's my day?” (or /day), use /capture <note> to file a quick "
     "thought, or /connect_google to link your calendar (read-only)."
 )
 
@@ -30,6 +30,7 @@ class TelegramChannel:
         self._app: Application = ApplicationBuilder().token(token).build()
         self._app.add_handler(CommandHandler("start", self._on_start))
         self._app.add_handler(CommandHandler("capture", self._on_capture))
+        self._app.add_handler(CommandHandler("day", self._on_day))
         self._app.add_handler(CommandHandler("connect_google", self._on_connect_google))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_message))
         self._app.add_error_handler(self._on_error)
@@ -72,6 +73,19 @@ class TelegramChannel:
             return
         capture_id = await create_capture(text, source="telegram")
         await update.message.reply_text(f"Captured ✓ (#{capture_id})")
+
+    async def _on_day(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """/day — same answer as the natural-language "what's my day?" query."""
+        if not self._authorized(update) or update.message is None:
+            return
+        user_id = str(update.effective_user.id)
+        try:
+            reply, _cid = await service.handle_incoming("telegram", user_id, "what's my day?")
+        except Exception as exc:  # noqa: BLE001 — friendly error, detail to logs.
+            log.error("telegram_day_failed", error=str(exc))
+            await update.message.reply_text("Sorry — I couldn't reach your calendar just now.")
+            return
+        await update.message.reply_text(reply)
 
     async def _on_connect_google(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._authorized(update) or update.message is None:
