@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.calendar import router as calendar_router
 from app.api.capture import router as capture_router
 from app.api.chat import router as chat_router
+from app.api.google_oauth import router as google_oauth_router
 from app.api.health import router as health_router
 from app.config import get_settings
 from app.telemetry import configure_logging, get_logger
@@ -58,6 +60,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(capture_router)
+    app.include_router(google_oauth_router)
+    app.include_router(calendar_router)
     log.info("brain_started", app_env=settings.app_env, llm_provider=settings.local_llm_provider)
     return app
 

@@ -19,3 +19,27 @@ class CaptureRequest(BaseModel):
 class CaptureResponse(BaseModel):
     id: int
     status: str = "captured"
+
+
+# --- Phase 2A: Google Calendar (read-only) ---
+
+
+class GoogleConnectResponse(BaseModel):
+    """The consent URL the operator opens in a browser to authorize read-only Calendar access."""
+
+    auth_url: str
+
+
+class CalendarEventOut(BaseModel):
+    summary: str
+    start: str  # ISO 8601
+    end: str  # ISO 8601
+    all_day: bool
+    location: str | None = None
+
+
+class TodayCalendarResponse(BaseModel):
+    connected: bool
+    timezone: str
+    events: list[CalendarEventOut] = Field(default_factory=list)
+    detail: str | None = None  # e.g. how to connect when connected is False

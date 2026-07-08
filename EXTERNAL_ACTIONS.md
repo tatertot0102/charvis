@@ -107,40 +107,70 @@
 
 ## Phase 2 — See my life (read-only)
 
+> **Phase 2A (current) needs ONLY Google Calendar, read-only.** Gmail (2.2) and Drive are later
+> sub-phases — do not enable or scope them yet. The brain requests exactly one scope in Phase 2A:
+> `calendar.readonly`. Nothing here can write, send, delete, or spend.
+
 ### 2.1 — Google Cloud project + OAuth consent screen (any browser)
-- **Purpose:** foundation for Gmail, Calendar, and Drive access.
+- **Purpose:** foundation for Google API access (Phase 2A: Calendar only).
 - **Why needed:** Google APIs require an OAuth client.
 - **Where to click:**
   1. https://console.cloud.google.com/ → top bar **project dropdown → New Project** → name "Jarvis" → Create → select it.
   2. **APIs & Services → OAuth consent screen** → User type **External** → Create.
   3. Fill app name "Jarvis", your email as support + developer contact → Save and continue.
-  4. **Scopes:** skip for now (added per API below) → Save.
+  4. **Scopes:** skip here (the brain requests `calendar.readonly` at connect time) → Save.
   5. **Test users:** add **your own Google account** (maxwellreyfman@gmail.com). Leaving the app in **"Testing"** status means **no Google verification is required** and tokens work for test users. → Save.
 - **Info you need:** your Google account email (already a test user).
 - **Where it goes:** nothing yet; this gates the client ID below.
 - **Verify:** consent screen shows status "Testing" with your email listed as a test user.
 
-### 2.2 — Enable the Google APIs (same console)
-- **Purpose:** turn on the specific APIs Jarvis calls.
-- **Where to click:** **APIs & Services → Library** → search and **Enable** each:
-  - **Google Calendar API** (Phase 2 read)
-  - **Gmail API** (Phase 2 read; Phase 4 send)
-  - **Google Drive API** (Phase 5) — enable now or when Phase 5 starts.
-- **Verify:** each shows "API Enabled" in the Library.
+### 2.2 — Enable the Google Calendar API (same console)
+- **Purpose:** turn on the one API Jarvis calls in Phase 2A.
+- **Where to click:** **APIs & Services → Library** → search **Google Calendar API** → **Enable**.
+  - Gmail API / Drive API are **not** needed for Phase 2A — enable them only when their sub-phase begins.
+- **Verify:** the Calendar API shows "API Enabled" in the Library.
 
-### 2.3 — OAuth client credentials (same console)
-- **Purpose:** the client ID/secret the brain uses to run the OAuth flow.
+### 2.3 — OAuth client credentials — **Web application** (same console)
+- **Purpose:** the client ID/secret the brain uses to run the OAuth flow, plus the **redirect URI**
+  Google will send the browser back to.
+- **Why "Web application" (not Desktop):** the brain completes OAuth via a server callback endpoint
+  (`GET /integrations/google/callback`). That pattern needs a **registered redirect URI**, which is
+  exactly what a Web-application client provides. (Desktop clients don't register a fixed callback
+  URL and don't fit this flow.)
 - **Where to click:**
   1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-  2. Application type: **Desktop app** (simplest for a self-hosted one-time auth flow) → name "Jarvis Desktop" → Create.
-  3. Download the JSON (contains `client_id` + `client_secret`).
-- **Info you need:** `client_id`, `client_secret`.
-- **Where it goes:** `.env` → `GOOGLE_CLIENT_ID=...`, `GOOGLE_CLIENT_SECRET=...`. Do **not** commit the JSON; copy the two values out.
-- **Verify:** run the project's one-time auth command (provided when Phase 2 lands): it opens a browser → you pick your Google account → "Google hasn't verified this app" → **Advanced → Go to Jarvis (unsafe)** (expected for a Testing app) → grant the requested **read-only** scopes → the brain stores an encrypted **refresh token** in Postgres. Confirm with a "what's on my calendar today?" query returning real events.
-- **Scopes requested (least privilege, per phase):**
-  - Phase 2 read: `calendar.readonly`, `gmail.readonly`.
-  - Phase 4 act: add `gmail.send` (or `gmail.compose`) — triggers a re-consent.
-  - Phase 5: add `drive.readonly` / `drive.file` as needed.
+  2. Application type: **Web application** → name "Jarvis Web".
+  3. Under **Authorized redirect URIs → + Add URI**, paste **exactly**:
+     `http://localhost:8000/integrations/google/callback`
+     - This must match `GOOGLE_OAUTH_REDIRECT_URI` in `.env` character-for-character.
+     - **Do the one-time connect from a browser on the machine running the brain** (so `localhost:8000`
+       resolves to the container). Google only accepts `https://…` or `http://localhost` / `http://127.0.0.1`
+       redirect URIs for Web clients — a plain `http://<tailscale-ip>` will be **rejected**. If you must
+       authorize from another device, either register a `127.0.0.1` URI and SSH-tunnel, or set up a
+       Tailscale HTTPS hostname and register that `https://…/integrations/google/callback` URI instead
+       (then update `GOOGLE_OAUTH_REDIRECT_URI` to match). For MVP, the localhost path is simplest.
+  4. **Create** → copy the **Client ID** and **Client secret** (or download the JSON and copy the two
+     values out — do **not** commit the JSON).
+- **Where it goes:** `.env` (never committed) →
+  ```
+  GOOGLE_CLIENT_ID=<client id>
+  GOOGLE_CLIENT_SECRET=<client secret>
+  GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/integrations/google/callback
+  ```
+  Then apply it: `docker compose up -d` (restart the brain so it reloads `.env`).
+- **Run the one-time connect flow:**
+  1. Get the consent URL — either `make google-connect` (prints it), or on Telegram send
+     **`/connect_google`** to the bot (it replies with the link). Open the link **in a browser on the
+     brain's host**.
+  2. Pick your Google account → **"Google hasn't verified this app"** → **Advanced → Go to Jarvis
+     (unsafe)** (expected for a Testing app) → grant **read-only Calendar** access.
+  3. Google redirects to the callback; the brain stores an **encrypted refresh token** in Postgres
+     and shows a "Connected ✓" page.
+- **Verify:** `make calendar-today` returns real events (JSON), or text **"what's my day?"** to the
+  Telegram bot and get today's schedule. `GET /calendar/today` now returns `"connected": true`.
+- **Scope (least privilege):** Phase 2A requests only `calendar.readonly`. `gmail.readonly` (later
+  Phase 2 sub-step), `gmail.send` (Phase 4), and `drive.*` (Phase 5) each trigger a fresh re-consent
+  when their phase adds them.
 
 ### 2.4 — Todoist API token (any browser)
 - **Purpose:** read (Phase 2) and later add/complete (Phase 4) tasks.
@@ -227,9 +257,11 @@ LOCAL_LLM_PROVIDER=ollama
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
 LOCAL_LLM_MODEL=llama3.2:3b
 SECRET_ENCRYPTION_KEY=
-# Phase 2
+# Phase 2A (Calendar, read-only)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/integrations/google/callback
+# Phase 2 (later sub-steps)
 TODOIST_API_TOKEN=
 # (agents read AUTH_SHARED_TOKEN + brain URL, set on their own devices)
 ```

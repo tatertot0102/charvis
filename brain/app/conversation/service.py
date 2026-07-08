@@ -7,9 +7,12 @@ from sqlalchemy import select
 
 from app import llm
 from app.config import get_settings
+from app.conversation import intents
 from app.db.models import Conversation, Message
 from app.db.session import get_session
+from app.integrations.google import calendar
 from app.llm import ChatMessage
+from app.security.crypto import EncryptionUnavailableError
 from app.telemetry import get_logger
 
 log = get_logger(__name__)
@@ -27,17 +30,37 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         session.add(Message(conversation_id=conversation.id, role="user", content=text))
         await session.flush()
 
-        history = await _load_recent_messages(session, conversation.id, settings.history_limit)
-        prompt = [ChatMessage(role="system", content=settings.system_prompt)]
-        prompt += [ChatMessage(role=m.role, content=m.content) for m in history]
-
-        reply = await llm.generate(prompt)
+        # Deterministic intents answer directly (no model call). Phase 2A: "what's my day?".
+        if intents.is_todays_schedule_query(text):
+            reply = await _todays_schedule_reply()
+        else:
+            history = await _load_recent_messages(session, conversation.id, settings.history_limit)
+            prompt = [ChatMessage(role="system", content=settings.system_prompt)]
+            prompt += [ChatMessage(role=m.role, content=m.content) for m in history]
+            reply = await llm.generate(prompt)
 
         session.add(Message(conversation_id=conversation.id, role="assistant", content=reply))
         await session.commit()
 
     log.info("conversation_turn", channel=channel, conversation_id=conversation.id)
     return reply, conversation.id
+
+
+async def _todays_schedule_reply() -> str:
+    """Answer a 'what's my day?' query from the calendar, with friendly fallbacks."""
+    try:
+        events = await calendar.list_todays_events()
+    except calendar.NotConnectedError:
+        return (
+            "I'm not connected to your Google Calendar yet. Ask me to connect (or hit "
+            "/integrations/google/connect) to grant read-only access."
+        )
+    except EncryptionUnavailableError:
+        return "I can't read your calendar yet — the encryption key isn't configured on the server."
+    except Exception as exc:  # noqa: BLE001 — friendly message to the user, detail to the logs.
+        log.error("schedule_reply_failed", error=str(exc), error_type=type(exc).__name__)
+        return "Sorry — I couldn't reach your calendar just now. Try again in a moment."
+    return calendar.format_todays_events(events)
 
 
 async def _get_or_create_conversation(session, channel: str, external_id: str) -> Conversation:

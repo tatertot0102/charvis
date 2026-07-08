@@ -11,6 +11,22 @@ help: ## Show this help
 token: ## Generate a random AUTH_SHARED_TOKEN
 	@python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
+.PHONY: secret-key
+secret-key: ## Generate a Fernet SECRET_ENCRYPTION_KEY (encrypts OAuth tokens at rest)
+	@python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+.PHONY: google-connect
+google-connect: ## Print the Google OAuth consent URL (open it in a browser)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/integrations/google/connect
+
+.PHONY: calendar-today
+calendar-today: ## Fetch today's calendar via the API (uses AUTH_SHARED_TOKEN from .env)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/calendar/today && echo
+
 .PHONY: up
 up: ## Build + start brain and db (foreground)
 	$(COMPOSE) up --build
