@@ -268,21 +268,48 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
   meeting", "what is my next meeting about?", "what emails relate to my next event?", "what deadlines are
   coming up?" (plus 2A "what's my day?" / 2B "what am I waiting on?" still route correctly).
   **No migration** — 2C is pure read-only aggregation over existing tables + live APIs; nothing persisted.
-- **2D — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
-  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0005`.
-- **2E — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
+
+**Second refinement (post-2C):** Add two new phases before Todoist to deepen reasoning and introduce gated write actions:
+
+- **2C.5 — Deep Context + Better Judgment:** Long-range reasoning over assembled data. Scan Calendar
+  back/forward 90 days; Gmail back 6 months. Pattern detection: recurring people (who emails you most,
+  who you reply to, who you ignore), recurring projects (inferred from calendar clusters + email threads),
+  recurring deadlines (from description extraction + title analysis), activity patterns (deep-work hours,
+  procrastination zones). Extract and store durable conclusions: "important people" (you contact 2x/week),
+  "active projects" (appear in 5+ recent calendar + email), "my deadlines" (birthdays, anniversaries,
+  recurring commitments). Explain conclusions with evidence: *"I think ARISE matters — it's in 6 calendar
+  events and 12 recent emails."* Better priority scoring (who matters + what's urgent + who's blocked).
+  Better "what should I do next?" and "what am I forgetting?". Better junk filtering. Extracting real
+  commitments from old email/calendar. **Read-only** — no writes. New tables: `durable_conclusions`,
+  `detected_patterns`, `extracted_commitments`.
+
+- **2D — Calendar Actions with Confirmation:** First write phase, **but gated by mandatory confirmation**.
+  Calendar write connector (add `calendar.readwrite` to Google OAuth client scopes). Create/update/delete
+  events, find free time, propose schedule blocks, detect conflicts. **Crucial rule: must always draft-then-confirm.**
+  Flow: (1) User: *"move my meeting to 4pm"*; (2) Jarvis searches, finds *"College counselor call 3:00–3:30"*,
+  prepares draft action; (3) Jarvis replies: *"I can move 'College counselor call' to 4:00–4:30. Reply CONFIRM to execute."*
+  (4) Only if user replies exactly "CONFIRM" does Jarvis execute. If user says anything else, action is discarded.
+  Approval flow on Telegram (one-tap CONFIRM button) + `/approvals` GET endpoint to list pending actions.
+  Pending actions table: `pending_calendar_actions` (event_id, proposed_action, user_confirmation_required).
+  Tests prove: no write happens without confirmation, CONFIRM executes only the prepared action, wrong
+  responses are ignored. **No email sends; no other writes yet.** Migration `0005`.
+
+- **2E — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
+  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0006`.
+- **2F — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
   Today view (timeline), waiting-on view (split), deadlines view (urgency escalation), next-action view.
-- **2F — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
+- **2G — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
   active window, via launchd), chrome-extension (active tab), android-tasker (location, battery, SMS,
-  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0006`.
+  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0007`.
 
 **Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
 (labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local
 model is reserved for open-ended conversation and future Phase 3 life-model reasoning.
 
-**Deferred to Phase 3:** LLM-based life-model fact extraction (projects/deadlines/commitments from content),
-planner (priority model, scheduling, decomposition), autonomy tiers, approval queue. Phase 3 is the "Think"
-phase where Jarvis reasons over the data Phase 2 collects.
+**Deferred to Phase 3:** Full planner (priority model, scheduling, decomposition), full life-model fact extraction
+(projects/deadlines/commitments from content), autonomy tier expansion (approval for non-calendar writes).
+Phase 3 is the "Think" phase where Jarvis reasons deeply over the data Phase 2 collects and writes back
+safely through expanded autonomy gates.
 
 ### Time-per-phase caveat
 Estimates assume one focused engineer + Claude Code, and that external setup (OAuth screens, Tasker,

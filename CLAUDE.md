@@ -274,17 +274,27 @@ the frontend.
   then unified intelligence layer:
   - **2A (done):** Google Calendar read-only, OAuth flow, `GET /calendar/today`.
   - **2B (done):** Gmail read-only + classification + waiting-on ledger + people life-model.
-  - **2C — Unified Intelligence:** Combine Calendar + Gmail + waiting-on into context-aware Telegram replies.
-    `/state/today`, `/state/waiting`, `/state/deadlines`, `/state/next-action`. Meeting briefings.
-  - **2D — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
-  - **2E — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
-  - **2F — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).
+  - **2C (done):** Unified Intelligence: Combine Calendar + Gmail + waiting-on into context-aware Telegram 
+    replies. `/state/today`, `/state/waiting`, `/state/deadlines`, `/state/next-action`. Meeting briefings.
+  - **2C.5 — Deep Context + Better Judgment:** Long-range lookback/lookahead across all sources. Pattern 
+    detection (recurring people, projects, deadlines, response patterns). Durable conclusions (important 
+    people, active projects, preferences) with evidence. Better priority scoring, better "what matters 
+    today?", better "what should I do next?". Filtering junk. Extracting real commitments from old email/
+    calendar. **Read-only** — no writes.
+  - **2D — Calendar Actions with Confirmation:** Calendar write connector (create/update/delete events, 
+    find free time, propose blocks, detect conflicts). **Crucial: must always draft-then-confirm.** User 
+    asks to move a meeting → Jarvis proposes exact change → User must reply "CONFIRM" to execute. No 
+    immediate writes. Tests prove no write happens without confirmation. **No email sends; no other writes yet.**
+  - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
+  - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
+  - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).
     `/ingest/{source}`, `/state/context`.
 - **Phase 3 — Think.** Planner (§6): decomposition, priority model, scheduling into free
   calendar time, overload detection, life-model fact extraction (projects/deadlines from content),
   daily rundown.
 - **Phase 4 — Act (gated).** Autonomy tiers + approval queue (§7). Turn on write actions:
-  send email (draft-first), move calendar blocks, add/complete tasks, send texts via agent.
+  send email (draft-first), move/update task blocks, add/complete tasks, send texts via agent. Expand
+  confirmation to non-calendar actions.
 - **Phase 5 — Secretary polish.** Coordination + follow-up nudges (§8), prep briefings (§9),
   dispatcher/tool-routing (§11), weekly review, learning + playbooks (§12).
 - **Phase 6 — Trust & boundaries.** Autonomy graduation, off-limits zones (§13), then voice
