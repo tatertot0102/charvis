@@ -271,17 +271,48 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
 
 **Second refinement (post-2C):** Add two new phases before Todoist to deepen reasoning and introduce gated write actions:
 
-- **2C.5 — Deep Context + Better Judgment:** Long-range reasoning over assembled data. Scan Calendar
-  back/forward 90 days; Gmail back 6 months. Pattern detection: recurring people (who emails you most,
-  who you reply to, who you ignore), recurring projects (inferred from calendar clusters + email threads),
-  recurring deadlines (from description extraction + title analysis), activity patterns (deep-work hours,
-  procrastination zones). Extract and store durable conclusions: "important people" (you contact 2x/week),
-  "active projects" (appear in 5+ recent calendar + email), "my deadlines" (birthdays, anniversaries,
-  recurring commitments). Explain conclusions with evidence: *"I think ARISE matters — it's in 6 calendar
-  events and 12 recent emails."* Better priority scoring (who matters + what's urgent + who's blocked).
-  Better "what should I do next?" and "what am I forgetting?". Better junk filtering. Extracting real
-  commitments from old email/calendar. **Read-only** — no writes. New tables: `durable_conclusions`,
-  `detected_patterns`, `extracted_commitments`.
+- **2C.5 — Deep Context + Better Judgment.** **Purpose: turn historical data into useful context for
+  today's decisions.** Jarvis does not discover interesting patterns for their own sake — every stored
+  conclusion must improve at least one of: **prioritization, meeting preparation, next-action
+  recommendations, deadline awareness, or decision-making.** Long-range reasoning over assembled data:
+  scan Calendar back/forward 90 days; Gmail back 6 months.
+
+  - **Pattern detection (decision-relevant only):** recurring people (who emails you most, who you reply
+    to, who you ignore), recurring projects (calendar clusters + email threads), recurring deadlines
+    (description/title extraction), activity patterns (deep-work hours, procrastination zones). Feeds
+    better priority scoring (who matters + what's urgent + who's blocked), better "what matters today?",
+    "what should I do next?", and "what am I forgetting?"; and better junk/promotional filtering.
+
+  - **Confidence scoring (required on every conclusion):** each `DurableConclusion` carries a
+    `confidence` score `0.0–1.0`, a `supporting_evidence` breakdown, and a `source_list`. The score is
+    *derived from and explained by* the evidence — never an opaque number. Example — high confidence
+    (0.96): *"ARISE is an active project because: 12 Gmail threads · 6 calendar events · mentioned in
+    Telegram · appears in captures."*
+
+  - **Explainability (hard requirement):** Jarvis must never present a durable conclusion it cannot
+    trace back to evidence. Every conclusion answers a "why": *"I think Dana is an important contact
+    because…"*, *"I think 6th Sense is a primary project because…"*, *"I believe this deadline is
+    important because…"*. **Every generated conclusion must be traceable back to evidence** — no
+    conclusion is stored without its supporting records.
+
+  - **Utility-first rule (design principle):** pattern detection exists *only* to improve today's
+    decisions. Interesting-but-useless observations are **not** stored. Good (actionable): *"You usually
+    respond to Dana within 24 hours."* · *"ARISE has become a primary project."* · *"You frequently
+    schedule engineering work on Sunday evenings."* Poor (trivia — do **not** store): *"You received 84
+    LinkedIn emails."* · *"You opened Chrome 317 times."*
+
+  - **Memory-inspection endpoints:** `GET /memory/conclusions`, `GET /memory/patterns`,
+    `GET /memory/projects`, `GET /memory/people`, `GET /memory/commitments`. Each exposes **confidence,
+    evidence, supporting records, timestamps, and source count** so the memory is fully auditable.
+
+  - **Telegram inspection:** "what do you know about me?", "what patterns have you noticed?", "what
+    projects do you think I'm working on?", "why do you think ARISE is important?", "why do you think
+    Dana matters?", "show low-confidence conclusions." Each answer surfaces the evidence, not just the
+    verdict.
+
+  - **Read-only** — no writes. New tables: `durable_conclusions` (conclusion, type, confidence,
+    evidence JSON, source_list, first_seen/last_updated), `detected_patterns`, `extracted_commitments`.
+    Migration `none` reserved — assigned when the tables land.
 
 - **2D — Calendar Actions with Confirmation:** First write phase, **but gated by mandatory confirmation**.
   Calendar write connector (add `calendar.readwrite` to Google OAuth client scopes). Create/update/delete
@@ -305,6 +336,15 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
 **Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
 (labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local
 model is reserved for open-ended conversation and future Phase 3 life-model reasoning.
+
+**Architecture note (2C.5 memory):** `ContextResolver` (`app/context/`) remains the **runtime reasoning
+engine** — it answers each request live. The new 2C.5 memory tables (`durable_conclusions`,
+`detected_patterns`, `extracted_commitments`) are a **durable support layer beneath it**, written by a
+periodic/consolidation pass and read by ContextResolver to sharpen priority scoring and briefings without
+re-deriving everything each time. The direction of dependency is: consolidation → memory tables →
+ContextResolver → answers. **Future planner phases (Phase 3) should consume these memory tables rather
+than reprocessing Gmail and Calendar on every request** — the memory is the shared, evidence-backed model
+of "me" that the planner reasons over, keeping per-request work cheap and conclusions consistent.
 
 **Deferred to Phase 3:** Full planner (priority model, scheduling, decomposition), full life-model fact extraction
 (projects/deadlines/commitments from content), autonomy tier expansion (approval for non-calendar writes).

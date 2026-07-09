@@ -276,11 +276,16 @@ the frontend.
   - **2B (done):** Gmail read-only + classification + waiting-on ledger + people life-model.
   - **2C (done):** Unified Intelligence: Combine Calendar + Gmail + waiting-on into context-aware Telegram 
     replies. `/state/today`, `/state/waiting`, `/state/deadlines`, `/state/next-action`. Meeting briefings.
-  - **2C.5 — Deep Context + Better Judgment:** Long-range lookback/lookahead across all sources. Pattern 
-    detection (recurring people, projects, deadlines, response patterns). Durable conclusions (important 
-    people, active projects, preferences) with evidence. Better priority scoring, better "what matters 
-    today?", better "what should I do next?". Filtering junk. Extracting real commitments from old email/
-    calendar. **Read-only** — no writes.
+  - **2C.5 — Deep Context + Better Judgment:** **Turn historical data into useful context for today's
+    decisions.** Long-range lookback/lookahead across all sources. Pattern detection (recurring people,
+    projects, deadlines, response patterns) — but *only* patterns that improve prioritization, meeting
+    prep, next-action, deadline awareness, or decision-making. Every durable conclusion carries a
+    **confidence score (0.0–1.0), supporting evidence, and a source list**, and must be **explainable**
+    ("I think ARISE is a primary project because: 12 Gmail threads, 6 calendar events, mentioned in
+    Telegram → confidence 0.96"). **Memory-inspection endpoints** (`GET /memory/{conclusions,patterns,
+    projects,people,commitments}`) and Telegram introspection ("what do you know about me?", "why do you
+    think Dana matters?", "show low-confidence conclusions"). **Utility-first rule:** store only
+    conclusions that change a decision; never store trivia. **Read-only** — no writes.
   - **2D — Calendar Actions with Confirmation:** Calendar write connector (create/update/delete events, 
     find free time, propose blocks, detect conflicts). **Crucial: must always draft-then-confirm.** User 
     asks to move a meeting → Jarvis proposes exact change → User must reply "CONFIRM" to execute. No 
