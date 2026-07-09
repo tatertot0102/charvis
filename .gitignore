@@ -24,3 +24,6 @@ dist/
 
 # Claude Code local settings
 .claude/
+
+# local editable-install metadata
+*.egg-info/

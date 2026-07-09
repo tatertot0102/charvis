@@ -63,6 +63,24 @@ state-deadlines: ## Upcoming deadlines from calendar + flagged email (read-only)
 		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
 		http://localhost:$${BIND_PORT:-8000}/state/deadlines && echo
 
+.PHONY: memory-consolidate
+memory-consolidate: ## (Re)build memory from existing data — conclusions/patterns/commitments (2C.5)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -X POST -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/memory/consolidate && echo
+
+.PHONY: memory-projects
+memory-projects: ## Projects Jarvis thinks you're working on, with evidence + confidence (2C.5)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/memory/projects && echo
+
+.PHONY: memory-conclusions
+memory-conclusions: ## Everything Jarvis believes about you, most-confident first (2C.5)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/memory/conclusions && echo
+
 .PHONY: up
 up: ## Build + start brain and db (foreground)
 	$(COMPOSE) up --build

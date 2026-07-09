@@ -153,3 +153,68 @@ class EventBriefingResponse(BaseModel):
     related_emails: list[RelatedEmailOut] = Field(default_factory=list)
     waiting_on_me_count: int = 0
     detail: str | None = None
+
+
+# --- Phase 2C.5: memory (evidence-backed conclusions about "me") -------------
+
+
+class ContextTagOut(BaseModel):
+    name: str
+    confidence: float
+
+
+class ConclusionOut(BaseModel):
+    kind: str  # project | person | preference | relationship
+    subject: str
+    statement: str
+    confidence: float
+    evidence: dict = Field(default_factory=dict)  # {by_source: {...}, records: [...]}
+    source_list: list[str] = Field(default_factory=list)
+    contexts: list[ContextTagOut] = Field(default_factory=list)
+    first_seen: str | None = None
+    last_updated: str | None = None
+
+
+class ConclusionsResponse(BaseModel):
+    count: int = 0
+    conclusions: list[ConclusionOut] = Field(default_factory=list)
+
+
+class PatternOut(BaseModel):
+    pattern_type: str
+    subject: str
+    description: str
+    confidence: float
+    evidence: dict = Field(default_factory=dict)
+    source_list: list[str] = Field(default_factory=list)
+    first_seen: str | None = None
+    last_updated: str | None = None
+
+
+class PatternsResponse(BaseModel):
+    count: int = 0
+    patterns: list[PatternOut] = Field(default_factory=list)
+
+
+class CommitmentOut(BaseModel):
+    direction: str  # owed_by_me | owed_to_me | deadline
+    description: str
+    counterparty: str | None = None
+    due_at: str | None = None
+    confidence: float
+    evidence: dict = Field(default_factory=dict)
+    source_list: list[str] = Field(default_factory=list)
+    first_seen: str | None = None
+    last_updated: str | None = None
+
+
+class CommitmentsResponse(BaseModel):
+    count: int = 0
+    commitments: list[CommitmentOut] = Field(default_factory=list)
+
+
+class ConsolidateResponse(BaseModel):
+    conclusions: int
+    patterns: int
+    commitments: int
+    context_tags: int

@@ -154,6 +154,41 @@ async def list_upcoming_events(
     return events
 
 
+def _fetch_events_window(
+    creds: Credentials, tz: ZoneInfo, back_days: int, forward_days: int
+) -> list[dict]:
+    """Events spanning [now - back_days, now + forward_days]. Run via asyncio.to_thread."""
+    now = datetime.now(tz)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    response = (
+        service.events()
+        .list(
+            calendarId=_PRIMARY_CALENDAR,
+            timeMin=(now - timedelta(days=back_days)).astimezone(UTC).isoformat(),
+            timeMax=(now + timedelta(days=forward_days)).astimezone(UTC).isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+            maxResults=MAX_EVENTS,
+        )
+        .execute()
+    )
+    return response.get("items", [])
+
+
+async def list_events_window(
+    account: str = "default", back_days: int = 90, forward_days: int = 90
+) -> list[CalendarEvent]:
+    """Events across a past+future window — the long-range scan for memory consolidation."""
+    creds = await tokens.load_credentials(account)
+    if creds is None:
+        raise NotConnectedError("Google Calendar is not connected.")
+    tz = _resolve_tz()
+    raw = await asyncio.to_thread(_fetch_events_window, creds, tz, back_days, forward_days)
+    events = [_parse_event(e, tz) for e in raw]
+    log.info("calendar_window_fetched", account=account, count=len(events))
+    return events
+
+
 def next_timed_event(events: list[CalendarEvent], now: datetime | None = None) -> CalendarEvent | None:
     """First non-all-day event that hasn't ended yet (events assumed start-sorted). Pure/testable."""
     reference = now or datetime.now(UTC)

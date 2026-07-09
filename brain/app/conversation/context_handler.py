@@ -12,6 +12,7 @@ from app.context import briefing, deadlines, resolver
 from app.conversation.intents import ContextIntent
 from app.coordination import waiting
 from app.integrations.google import calendar, gmail
+from app.memory import next_action
 from app.security.crypto import EncryptionUnavailableError
 from app.telemetry import get_logger
 
@@ -69,7 +70,8 @@ async def handle(intent: ContextIntent) -> str:
             except Exception:  # noqa: BLE001
                 wait_items = []
             dls = await deadlines.aggregate_deadlines()
-            return briefing.format_next_action(context, wait_items, dls)
+            memory_hint = await next_action.suggest_from_memory()
+            return briefing.format_next_action(context, wait_items, dls, memory_hint=memory_hint)
 
         return _ERROR
     except (gmail.NotConnectedError, calendar.NotConnectedError):

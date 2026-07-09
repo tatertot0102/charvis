@@ -178,3 +178,81 @@ def detect_context_intent(text: str) -> ContextIntent | None:
     if any(phrase in normalized for phrase in _NEXT_ACTION_PHRASES):
         return ContextIntent.NEXT_ACTION
     return None
+
+
+# --- Phase 2C.5: memory-introspection intents --------------------------------
+
+
+class MemoryIntent(str, Enum):
+    KNOW_ABOUT_ME = "know_about_me"  # what do you know about me
+    PATTERNS = "patterns"  # what patterns have you noticed
+    PROJECTS = "projects"  # what projects do you think I'm working on
+    WHY = "why"  # why do you think X is important (carries a subject)
+    LOW_CONFIDENCE = "low_confidence"  # show low-confidence conclusions
+
+
+_LOW_CONFIDENCE_PHRASES = (
+    "low confidence", "low confidence conclusions", "least confident", "not sure about",
+    "what are you unsure", "what are you least sure", "uncertain conclusions", "shaky conclusions",
+    "what are you unsure about", "least sure",
+)
+_PATTERN_PHRASES = (
+    "what patterns", "patterns have you noticed", "noticed any patterns", "any patterns",
+    "what have you noticed", "what patterns have you", "notice any patterns", "behavior patterns",
+)
+_PROJECT_PHRASES = (
+    "what projects", "what projects am i working", "what projects do you think", "my projects",
+    "what am i working on", "which projects", "projects am i working on", "projects do you think",
+)
+_KNOW_PHRASES = (
+    "what do you know about me", "what do you know", "what have you learned about me",
+    "what do you remember about me", "tell me what you know", "what have you figured out",
+    "what do you understand about me", "what do you know about my life", "what have you learned",
+)
+
+# "why do you think ARISE is important" / "why does Dana matter" → capture the subject.
+_WHY_THINK_RE = re.compile(
+    r"why (?:do|does) (?:you|i) (?:think|believe|feel|say) (?:that )?(.+?)"
+    r"(?:\s+(?:is|are|really|so|matters?))?\s+(?:important|matters?|a priority|relevant)"
+)
+_WHY_IS_RE = re.compile(r"why (?:is|are|does|do) (.+?) (?:important|matters?|a priority|relevant)")
+_WHY_MATTER_RE = re.compile(r"why (?:do|does) (.+?) matter")
+_WHY_FALLBACK_RE = re.compile(r"why (?:do|does) (?:you|i) (?:think|believe|say) (?:that )?(.+)")
+
+_FILLER = frozenset({"so", "really", "very", "the", "a", "an", "to", "me", "is", "are", "that"})
+
+
+def _clean_subject(raw: str) -> str | None:
+    words = [w for w in raw.split() if w not in _FILLER and w not in _PRONOUNS]
+    return " ".join(words) if words else None
+
+
+def _extract_why_subject(normalized: str) -> str | None:
+    for pattern in (_WHY_THINK_RE, _WHY_IS_RE, _WHY_MATTER_RE, _WHY_FALLBACK_RE):
+        match = pattern.search(normalized)
+        if match:
+            subject = _clean_subject(match.group(1).strip())
+            if subject:
+                return subject
+    return None
+
+
+def detect_memory_intent(text: str) -> tuple[MemoryIntent, str | None] | None:
+    """Map a message to a memory-introspection intent (+ optional subject), or None to fall back.
+
+    'Why …' is checked first since it is the most specific; the generic 'what do you know' is last.
+    """
+    normalized = _normalize(text)
+    if normalized.startswith("why"):
+        subject = _extract_why_subject(normalized)
+        if subject:
+            return (MemoryIntent.WHY, subject)
+    if any(phrase in normalized for phrase in _LOW_CONFIDENCE_PHRASES):
+        return (MemoryIntent.LOW_CONFIDENCE, None)
+    if any(phrase in normalized for phrase in _PATTERN_PHRASES):
+        return (MemoryIntent.PATTERNS, None)
+    if any(phrase in normalized for phrase in _PROJECT_PHRASES):
+        return (MemoryIntent.PROJECTS, None)
+    if any(phrase in normalized for phrase in _KNOW_PHRASES):
+        return (MemoryIntent.KNOW_ABOUT_ME, None)
+    return None

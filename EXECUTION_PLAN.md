@@ -271,8 +271,8 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
 
 **Second refinement (post-2C):** Add two new phases before Todoist to deepen reasoning and introduce gated write actions:
 
-- **2C.5 — Deep Context + Better Judgment.** **Purpose: turn historical data into useful context for
-  today's decisions.** Jarvis does not discover interesting patterns for their own sake — every stored
+- **2C.5 — Deep Context + Better Judgment (✓ verified).** **Purpose: turn historical data into useful
+  context for today's decisions.** Jarvis does not discover interesting patterns for their own sake — every stored
   conclusion must improve at least one of: **prioritization, meeting preparation, next-action
   recommendations, deadline awareness, or decision-making.** Long-range reasoning over assembled data:
   scan Calendar back/forward 90 days; Gmail back 6 months.
@@ -310,9 +310,19 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
     Dana matters?", "show low-confidence conclusions." Each answer surfaces the evidence, not just the
     verdict.
 
-  - **Read-only** — no writes. New tables: `durable_conclusions` (conclusion, type, confidence,
-    evidence JSON, source_list, first_seen/last_updated), `detected_patterns`, `extracted_commitments`.
-    Migration `none` reserved — assigned when the tables land.
+  - **Read-only** w.r.t. external systems — the consolidation pass writes only Jarvis's own memory
+    tables. Five new tables (migration `0005`): `durable_conclusions` (kind, subject, statement,
+    confidence, evidence JSON, source_list, first_seen/last_updated), `detected_patterns`,
+    `extracted_commitments`, `contexts`, and `entity_contexts` (overlapping context tags — an entity
+    belongs to *several* contexts: Work, School, Engineering, Research, College Applications, Family,
+    …, not one category). Consolidation is authoritative: re-runs upsert in place and **prune**
+    conclusions/patterns/commitments no longer supported by the data (with a guard so a transient
+    empty gather never wipes good memory). Pipeline: `memory/{gather → derive → persist}`; confidence
+    is a noisy-OR over evidence sources (`memory/confidence.py`), so agreement across email + calendar
+    + notes beats piling on one source, and the score is always explainable. `/state/next-action` and
+    the Telegram next-action now consult a high-confidence stored commitment before falling back to the
+    live recommendation. Endpoints: `GET /memory/{conclusions,patterns,projects,people,commitments}` +
+    `POST /memory/consolidate`. **No new external setup** — consolidation reads only existing data.
 
 - **2D — Calendar Actions with Confirmation:** First write phase, **but gated by mandatory confirmation**.
   Calendar write connector (add `calendar.readwrite` to Google OAuth client scopes). Create/update/delete

@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     event_email_lookback_days: int = 30  # window for finding emails related to an event
     context_max_related_emails: int = 5  # cap on related emails pulled per event
 
+    # --- Memory / deep context (Phase 2C.5: consolidation over existing data) ---
+    memory_email_lookback_days: int = 180  # how far back the Gmail mirror is scanned (~6 months)
+    memory_calendar_back_days: int = 90  # long-range calendar lookback for consolidation
+    memory_calendar_forward_days: int = 90  # long-range calendar lookahead for consolidation
+    memory_capture_limit: int = 500  # max captures scanned per consolidation run
+    memory_telegram_message_limit: int = 500  # max chat messages scanned per consolidation run
+
     @property
     def telegram_allowed_ids(self) -> set[int]:
         return {int(x) for x in self.telegram_allowed_user_ids.split(",") if x.strip()}

@@ -13,6 +13,7 @@ from app.context import briefing, deadlines, resolver
 from app.coordination import waiting
 from app.deps import require_token
 from app.integrations.google import calendar, gmail
+from app.memory import next_action
 from app.schemas import (
     CalendarEventOut,
     DeadlineOut,
@@ -144,7 +145,8 @@ async def state_next_action(_: None = Depends(require_token)) -> NextActionRespo
     except Exception:  # noqa: BLE001
         items = []
     dls = await deadlines.aggregate_deadlines()
-    recommendation = briefing.format_next_action(context, items, dls)
+    memory_hint = await next_action.suggest_from_memory()
+    recommendation = briefing.format_next_action(context, items, dls, memory_hint=memory_hint)
     return NextActionResponse(connected=True, recommendation=recommendation)
 
 

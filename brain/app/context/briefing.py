@@ -137,24 +137,35 @@ def format_deadlines(deadlines: list[Deadline], now: datetime | None = None) -> 
 
 
 def format_next_action(
-    context: EventContext | None, waiting_items: list[WaitingItem], deadlines: list[Deadline]
+    context: EventContext | None,
+    waiting_items: list[WaitingItem],
+    deadlines: list[Deadline],
+    memory_hint: str | None = None,
 ) -> str:
-    """One prominent recommendation drawn from the highest-priority signal available."""
+    """One prominent recommendation drawn from the highest-priority signal available.
+
+    `memory_hint` (Phase 2C.5) is a high-confidence stored commitment from consolidation; it slots in
+    just below a live unanswered-question-before-your-next-meeting, sharpening the recommendation
+    without overriding the single most time-bound signal.
+    """
     # 1) An unanswered question on the next meeting's thread is the most actionable.
     if context is not None:
         owed = unanswered_question(context)
         if owed is not None:
             who = owed.message.from_name or owed.message.from_email
             return f"Reply to {who} about “{(owed.message.subject or '').strip()}” before your next meeting."
-    # 2) A high-urgency deadline.
+    # 2) A high-confidence commitment the memory layer already surfaced.
+    if memory_hint:
+        return memory_hint
+    # 3) A high-urgency deadline.
     high = [d for d in deadlines if d.urgency == "high"]
     if high:
         return f"Handle “{high[0].title}” — it's your most urgent deadline ({high[0].detail})".rstrip(" ()") + "."
-    # 3) The oldest thing you owe a reply on.
+    # 4) The oldest thing you owe a reply on.
     owe = [w for w in waiting_items if w.kind == "waiting_on_me"]
     if owe:
         return f"Reply to {owe[0].person_email or 'someone'} about “{owe[0].subject or ''}”."
-    # 4) A follow-up that's gone quiet.
+    # 5) A follow-up that's gone quiet.
     nudge = [w for w in waiting_items if w.kind == "waiting_on_them" and w.follow_up_recommended]
     if nudge:
         return f"Follow up with {nudge[0].person_email or 'someone'} — no reply on “{nudge[0].subject or ''}”."
