@@ -7,7 +7,13 @@ from sqlalchemy import select
 
 from app import llm
 from app.config import get_settings
-from app.conversation import context_handler, email_handler, intents, memory_handler
+from app.conversation import (
+    calendar_handler,
+    context_handler,
+    email_handler,
+    intents,
+    memory_handler,
+)
 from app.db.models import Conversation, Message
 from app.db.session import get_session
 from app.integrations.google import calendar
@@ -31,19 +37,35 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         await session.flush()
 
         # Deterministic intents answer directly (no general model call). Phase 2A: calendar;
-        # 2B: email; 2C: cross-source context/meeting-prep; 2C.5: memory introspection.
-        # Memory is checked first: "why do you think X…" must not be swallowed by other matchers.
+        # 2B: email; 2C: cross-source context/meeting-prep; 2C.5: memory introspection;
+        # 2D: calendar-write confirmation flow. An exact "CONFIRM"/"CANCEL" is checked FIRST so it
+        # can never be swallowed by another matcher — it's the write gate. Memory is next: "why do
+        # you think X…" must not be caught by other matchers.
         memory_intent = intents.detect_memory_intent(text)
         context_intent = intents.detect_context_intent(text)
         email_intent = intents.detect_email_intent(text)
-        if memory_intent is not None:
+        if intents.is_confirm(text):
+            reply = await calendar_handler.handle_confirm()
+        elif intents.is_cancel(text):
+            reply = await calendar_handler.handle_cancel()
+        elif memory_intent is not None:
             reply = await memory_handler.handle(*memory_intent)
         elif intents.is_todays_schedule_query(text):
             reply = await _todays_schedule_reply()
+        elif intents.is_free_time_query(text):
+            reply = await calendar_handler.handle_free_time()
         elif context_intent is not None:
             reply = await context_handler.handle(context_intent)
         elif email_intent is not None:
             reply = await email_handler.handle(*email_intent)
+        elif (
+            calendar_reply := await calendar_handler.handle_request(
+                text, channel=channel, external_id=external_id
+            )
+        ) is not None:
+            # A create/move/cancel request → drafts a pending action (never a write) and returns the
+            # proposal text. None means it wasn't a calendar action; fall through to the model.
+            reply = calendar_reply
         else:
             history = await _load_recent_messages(session, conversation.id, settings.history_limit)
             prompt = [ChatMessage(role="system", content=settings.system_prompt)]

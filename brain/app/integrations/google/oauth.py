@@ -5,8 +5,9 @@ Two-step web flow:
   2. exchange_code(code, state) → Google redirects back with a code; we swap it for tokens and
      store them encrypted (app.integrations.google.tokens).
 
-No write scopes are ever requested here (MVP.md: read-only). Adding gmail.send etc. is a Phase 4
-concern that must go through the autonomy gate.
+Phase 2D adds `calendar.events` (create/move/delete calendar events) — the FIRST write scope. It
+still routes through the autonomy gate: no calendar write executes without explicit confirmation
+(see app.calendar_actions). gmail.send / drive.* remain later-phase concerns.
 """
 from __future__ import annotations
 
@@ -22,9 +23,14 @@ log = get_logger(__name__)
 
 CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-# Both Google connectors share ONE credential/consent (no auth duplication). Adding a scope here
+# Phase 2D: the calendar WRITE scope (create/move/delete events). calendar.events also grants
+# read of events, so it supersedes calendar.readonly — we keep both listed for clarity. Every write
+# still passes through the confirmation gate (app.calendar_actions); the scope only makes the
+# eventual, user-confirmed API call possible.
+CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+# All Google connectors share ONE credential/consent (no auth duplication). Adding a scope here
 # means the operator must re-run the connect flow to re-consent (see EXTERNAL_ACTIONS.md §2).
-SCOPES = [CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE]
+SCOPES = [CALENDAR_READONLY_SCOPE, CALENDAR_EVENTS_SCOPE, GMAIL_READONLY_SCOPE]
 
 _AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
 _TOKEN_URI = "https://oauth2.googleapis.com/token"

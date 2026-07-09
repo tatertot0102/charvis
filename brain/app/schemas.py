@@ -218,3 +218,30 @@ class ConsolidateResponse(BaseModel):
     patterns: int
     commitments: int
     context_tags: int
+
+
+# --- Phase 2D: calendar actions with confirmation (approval queue) ------------
+
+
+class PendingActionOut(BaseModel):
+    id: int
+    account: str
+    action_type: str  # create | update | delete
+    status: str  # pending | executed | cancelled | expired | superseded | failed
+    summary: str  # the exact proposed change shown to the user
+    target_event_id: str | None = None
+    proposed_at: str | None = None  # ISO 8601
+    expires_at: str | None = None  # ISO 8601
+    resolved_at: str | None = None  # ISO 8601
+    result: str | None = None
+
+
+class ApprovalsResponse(BaseModel):
+    count: int = 0
+    actions: list[PendingActionOut] = Field(default_factory=list)
+
+
+class ApprovalDecisionResponse(BaseModel):
+    id: int
+    status: str  # the action's status after the decision
+    message: str  # human-readable result of confirm/cancel

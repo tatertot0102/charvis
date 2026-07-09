@@ -81,6 +81,12 @@ memory-conclusions: ## Everything Jarvis believes about you, most-confident firs
 		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
 		http://localhost:$${BIND_PORT:-8000}/memory/conclusions && echo
 
+.PHONY: approvals
+approvals: ## List pending calendar actions awaiting CONFIRM (Phase 2D)
+	@set -a; . ./.env; set +a; \
+		curl -fsS -H "Authorization: Bearer $$AUTH_SHARED_TOKEN" \
+		http://localhost:$${BIND_PORT:-8000}/approvals && echo
+
 .PHONY: up
 up: ## Build + start brain and db (foreground)
 	$(COMPOSE) up --build

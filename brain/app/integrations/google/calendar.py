@@ -189,6 +189,38 @@ async def list_events_window(
     return events
 
 
+def _fetch_events_range(creds: Credentials, tz: ZoneInfo, start: datetime, end: datetime) -> list[dict]:
+    """Events overlapping an explicit [start, end] window. Run via asyncio.to_thread."""
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    response = (
+        service.events()
+        .list(
+            calendarId=_PRIMARY_CALENDAR,
+            timeMin=start.astimezone(UTC).isoformat(),
+            timeMax=end.astimezone(UTC).isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+            maxResults=MAX_EVENTS,
+        )
+        .execute()
+    )
+    return response.get("items", [])
+
+
+async def list_events_range(
+    start: datetime, end: datetime, account: str = "default"
+) -> list[CalendarEvent]:
+    """Events overlapping [start, end] — the read behind conflict detection and free-time lookup."""
+    creds = await tokens.load_credentials(account)
+    if creds is None:
+        raise NotConnectedError("Google Calendar is not connected.")
+    tz = _resolve_tz()
+    raw = await asyncio.to_thread(_fetch_events_range, creds, tz, start, end)
+    events = [_parse_event(e, tz) for e in raw]
+    log.info("calendar_range_fetched", account=account, count=len(events))
+    return events
+
+
 def next_timed_event(events: list[CalendarEvent], now: datetime | None = None) -> CalendarEvent | None:
     """First non-all-day event that hasn't ended yet (events assumed start-sorted). Pure/testable."""
     reference = now or datetime.now(UTC)

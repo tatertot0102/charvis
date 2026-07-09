@@ -286,10 +286,13 @@ the frontend.
     projects,people,commitments}`) and Telegram introspection ("what do you know about me?", "why do you
     think Dana matters?", "show low-confidence conclusions"). **Utility-first rule:** store only
     conclusions that change a decision; never store trivia. **Read-only** — no writes.
-  - **2D — Calendar Actions with Confirmation:** Calendar write connector (create/update/delete events, 
-    find free time, propose blocks, detect conflicts). **Crucial: must always draft-then-confirm.** User 
-    asks to move a meeting → Jarvis proposes exact change → User must reply "CONFIRM" to execute. No 
-    immediate writes. Tests prove no write happens without confirmation. **No email sends; no other writes yet.**
+  - **2D (done):** Calendar Actions with Confirmation. Calendar write connector (create/update/delete
+    events, find free time, propose blocks, detect conflicts) + `pending_calendar_actions` approval
+    queue + `calendar.events` scope. **Always draft-then-confirm:** move/create/cancel request → Jarvis
+    proposes the exact change → user must reply "CONFIRM" (or POST `/approvals/{id}/confirm`) to execute.
+    Endpoints `GET /approvals`, `POST /approvals/{id}/{confirm,cancel}`. Tests prove: no write without
+    confirmation, only the latest pending confirms, wrong/expired confirmations don't execute, ambiguous
+    requests ask a clarifying question. No email sends; no other writes yet.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
   - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).

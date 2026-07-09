@@ -5,6 +5,7 @@ Phase 2B (read-only Gmail): email_messages (cached + classified), people (life-m
 waiting_items (waiting-on ledger).
 Phase 2C.5 (deep context / memory): durable_conclusions, detected_patterns,
 extracted_commitments, contexts, entity_contexts — the evidence-backed model of "me".
+Phase 2D (calendar actions with confirmation): pending_calendar_actions — the approval queue.
 """
 from datetime import datetime
 
@@ -293,6 +294,40 @@ class Context(Base):
 
     entity_links: Mapped[list["EntityContext"]] = relationship(
         back_populates="context", cascade="all, delete-orphan"
+    )
+
+
+class PendingCalendarAction(Base):
+    """A drafted calendar write awaiting explicit confirmation (Phase 2D, CLAUDE.md §7 tier-3).
+
+    THE HARD RULE: a calendar write NEVER fires directly. Every create/update/delete is first
+    written here with status="pending" and a human-readable `summary` of the exact proposed change.
+    It only executes after the user replies "CONFIRM" (Telegram) or POSTs /approvals/{id}/confirm.
+    Any other response leaves it pending; a fresh proposal supersedes the previous one; a stale one
+    expires. `payload` holds everything the executor needs so confirmation is a pure replay.
+    """
+
+    __tablename__ = "pending_calendar_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    channel: Mapped[str] = mapped_column(String(32), default="telegram")  # telegram | http
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)  # e.g. tg user id
+    action_type: Mapped[str] = mapped_column(String(16))  # create | update | delete
+    # pending | executed | cancelled | expired | superseded | failed
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    summary: Mapped[str] = mapped_column(Text)  # exact proposed change, shown to the user
+    target_event_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)  # everything execute() needs
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)  # executed id or error detail
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 

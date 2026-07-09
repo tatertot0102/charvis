@@ -237,6 +237,36 @@ def _extract_why_subject(normalized: str) -> str | None:
     return None
 
 
+# --- Phase 2D: calendar-action confirmation + free-time -----------------------
+
+# Exact whole-message confirm/cancel. Deliberately strict: "yes", "confirm please", "ok do it" must
+# NOT confirm a calendar write. The user must reply exactly "CONFIRM" (case-insensitive).
+_CONFIRM_WORDS = frozenset({"confirm", "confirmed"})
+_CANCEL_WORDS = frozenset({"cancel", "nvm", "nevermind", "never mind", "abort", "stop"})
+
+_FREE_TIME_PHRASES = (
+    "when am i free", "when am i available", "whats my free time", "free time",
+    "am i free", "do i have time", "find me time", "when do i have time", "any free time",
+    "open slots", "free slots", "gaps in my", "wheres my free",
+)
+
+
+def is_confirm(text: str) -> bool:
+    """True only when the whole message is exactly a confirmation word (the write gate)."""
+    return _normalize(text) in _CONFIRM_WORDS
+
+
+def is_cancel(text: str) -> bool:
+    """True only when the whole message is exactly a cancel word (drops a pending proposal)."""
+    return _normalize(text) in _CANCEL_WORDS
+
+
+def is_free_time_query(text: str) -> bool:
+    """True when the message asks about free/open time (a read, not a write)."""
+    normalized = _normalize(text)
+    return any(phrase in normalized for phrase in _FREE_TIME_PHRASES)
+
+
 def detect_memory_intent(text: str) -> tuple[MemoryIntent, str | None] | None:
     """Map a message to a memory-introspection intent (+ optional subject), or None to fall back.
 

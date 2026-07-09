@@ -18,8 +18,10 @@ log = get_logger(__name__)
 
 _START_TEXT = (
     "Jarvis here. Ask “what's my day?” (or /day) or “check my email / anything important? / what "
-    "am I waiting on?”, use /capture <note> to file a quick thought, or /connect_google to link "
-    "your Google account (read-only Calendar + Gmail)."
+    "am I waiting on?”, or manage your calendar — “move my 3pm to 4”, “schedule Dentist tomorrow "
+    "at 2”, “cancel standup”, “when am I free?”. Calendar changes are always drafted first: I show "
+    "the exact change and you reply CONFIRM to apply it. Use /capture <note> to file a quick "
+    "thought, or /connect_google to link your Google account."
 )
 
 

@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     event_email_lookback_days: int = 30  # window for finding emails related to an event
     context_max_related_emails: int = 5  # cap on related emails pulled per event
 
+    # --- Calendar actions (Phase 2D: writes, always draft-then-confirm) ---
+    calendar_action_ttl_minutes: int = 30  # a pending proposal past this cannot be confirmed
+    default_event_duration_minutes: int = 60  # duration for a created event with no explicit end
+    workday_start_hour: int = 9  # free-time search / new-event day bounds (local tz)
+    workday_end_hour: int = 18
+    free_time_min_slot_minutes: int = 30  # smallest gap reported as "free"
+
     # --- Memory / deep context (Phase 2C.5: consolidation over existing data) ---
     memory_email_lookback_days: int = 180  # how far back the Gmail mirror is scanned (~6 months)
     memory_calendar_back_days: int = 90  # long-range calendar lookback for consolidation

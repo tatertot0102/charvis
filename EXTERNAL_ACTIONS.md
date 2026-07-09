@@ -107,10 +107,12 @@
 
 ## Phase 2 — See my life (read-only)
 
-> **Phase 2A — Calendar (done).** Requests `calendar.readonly`. See §2.1–2.3.
-> **Phase 2B — Gmail (current).** Adds `gmail.readonly` to the *same* Google client — you must enable
-> the Gmail API and **re-run the connect flow to re-consent** (see §2.3b). Drive stays off until
-> Phase 5. Everything here is read-only: nothing can send, delete, label, or spend.
+> **Phase 2A — Calendar read (done).** Requests `calendar.readonly`. See §2.1–2.3.
+> **Phase 2B — Gmail read (done).** Adds `gmail.readonly` to the *same* Google client — enable the
+> Gmail API and **re-run the connect flow to re-consent** (see §2.3b). Read-only.
+> **Phase 2D — Calendar write (current).** Adds `calendar.events` to the *same* client so Jarvis can
+> create/move/delete events — but only **draft-then-confirm** (see §2.3c). You must **re-run the
+> connect flow to re-consent**. Gmail send / Drive stay off until Phases 4–5.
 
 ### 2.1 — Google Cloud project + OAuth consent screen (any browser)
 - **Purpose:** foundation for Google API access (Phase 2A: Calendar only).
@@ -196,6 +198,41 @@
   hint (Calendar keeps working).
 - **Note:** if the consent screen shows only Calendar, you enabled the Gmail API *after* starting the
   flow — cancel and re-run `make google-connect`.
+
+### 2.3c — Phase 2D: Calendar WRITE access (re-consent) — **required now**
+- **Purpose:** let Jarvis **create, move, and delete** Google Calendar events. This is the first
+  write scope. Every change is still **draft-then-confirm**: Jarvis shows the exact proposed change
+  and does nothing until you reply **CONFIRM** (Telegram) or POST `/approvals/{id}/confirm`. Reads,
+  Gmail, and everything else are untouched.
+- **Prerequisite:** you already did §2.1–2.3b (Calendar + Gmail connected once). The brain now also
+  requests `https://www.googleapis.com/auth/calendar.events` on the **same** OAuth client, so the
+  stored token must be upgraded by re-consenting.
+- **Steps:**
+  1. No new API to enable — the **Google Calendar API** from §2.2 already covers writes; no new
+     client or redirect URI is needed (the §2.3 Web-application client is reused).
+  2. **Re-run the connect flow** so Google prompts for the new scope: `make google-connect` (or send
+     **`/connect_google`** on Telegram) → open the link **on the brain's host** → pick your account →
+     **"Google hasn't verified this app" → Advanced → Go to Jarvis (unsafe)** → the consent screen now
+     also lists **"See, edit, share, and permanently delete all the calendars you can access using
+     Google Calendar"** (the `calendar.events` scope) alongside the existing read items → **Allow**.
+  3. The brain overwrites the stored token (same encrypted row) with one that now covers writes.
+- **Verify:**
+  - Text **"schedule Coffee tomorrow at 3pm"** (or "move my 3pm to 4", "cancel standup") to the bot.
+    Jarvis replies with the **exact** proposed change and asks you to reply **CONFIRM** — nothing is
+    written yet. `make approvals` shows the pending action with status `pending`.
+  - Reply **CONFIRM**. Only now does the event actually change in Google Calendar, and the action
+    flips to status `executed`.
+  - Reply with anything **other than** `CONFIRM` (e.g. "actually no") → nothing is written; the draft
+    stays pending until it expires (default 30 min, `CALENDAR_ACTION_TTL_MINUTES`) or you send
+    **`cancel`**.
+- **Safety notes (enforced in code + tests):** no calendar write ever fires without an explicit
+  CONFIRM; only the **latest** pending proposal can be confirmed; an **expired** proposal cannot be
+  confirmed; an **ambiguous** request ("cancel my meeting" when several match) makes Jarvis ask which
+  one instead of guessing. Until you complete this re-consent, a confirmed write returns a friendly
+  "I don't have calendar write permission yet — re-run /connect_google" message (the API call is
+  rejected by Google for lack of scope), so nothing changes by accident.
+- **Scope (least privilege):** Phase 2D adds only `calendar.events`. `gmail.send` (Phase 4) and
+  `drive.*` (Phase 5) each trigger their own fresh re-consent when their phase adds them.
 
 ### 2.4 — Todoist API token (any browser)
 - **Purpose:** read (Phase 2) and later add/complete (Phase 4) tasks.
