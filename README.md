@@ -4,19 +4,27 @@ A personal secretary you text, backed by a portable FastAPI "brain" in Docker, P
 **local LLM** (later phases). See `CLAUDE.md` for the product spec and `EXECUTION_PLAN.md` for the
 roadmap.
 
-> **Status: Phase 2C.5 — Deep Context / Memory.** Everything from 2A (Calendar) + 2B (Gmail) + 2C
-> (unified intelligence), plus a **memory layer**: a consolidation pass turns your existing history
-> (Gmail mirror, calendar, captures, chat) into evidence-backed **conclusions**, **patterns**, and
-> **commitments** — the model of "me" the ContextResolver reasons over. Every conclusion carries a
-> **confidence (0–1), an evidence breakdown, a source list, and timestamps**, and is fully
-> explainable ("I think ARISE is a project because: 12 email threads · 6 calendar events"). Entities
-> belong to **overlapping contexts** (Work, School, Research, Family, …), not one category. Adds
-> `GET /memory/{conclusions,patterns,projects,people,commitments}` + `POST /memory/consolidate`, and
-> Telegram introspection ("what do you know about me?", "why do you think ARISE is important?", "show
-> low-confidence conclusions"). **Read-only, no new external setup** — it only reads data Jarvis
-> already has. Migration `0005`.
+> **Status: Phase 2D.1 — Calendar Resolution Hardening.** Everything from 2A–2C.5, plus **calendar
+> write actions that are production-safe**. Jarvis can create, move, and delete Google Calendar
+> events — including **bulk** operations ("delete all future DSI events") — but **never without an
+> explicit, correct confirmation**. Event resolution is **confidence-scored** with real evidence:
+> title-keyword, **acronym** (DSI → Data Science Institute), **fuzzy**, attendee, location,
+> description, recurring-series, and time-of-day matching, over configurable lookback/lookahead
+> windows. A single action needs **`CONFIRM`**; a **bulk delete needs the stronger `CONFIRM DELETE`**
+> (a plain `CONFIRM` will not fire it). Every proposal cites its matched provider events with
+> per-event confidence and *why* each matched; zero matches → it says so and asks, never fabricates;
+> several unrelated matches → it asks which. The execution layer re-validates every event id against
+> Google before writing, so **unknown / fabricated / stale / deleted ids are rejected**. Adds
+> `GET /approvals`, `POST /approvals/{id}/confirm`, `POST /approvals/{id}/cancel`. Migrations `0006`
+> (approval queue) + `0007` (confidence / required-phrase / item-count). **Requires a one-time Google
+> re-consent** for the `calendar.events` write scope — see `EXTERNAL_ACTIONS.md §2.3c`.
+>
+> ### Permanent engineering principle
+> **Jarvis may reason under uncertainty, but it may never invent facts. Every factual statement
+> shown to the user must be traceable to evidence from a provider (Google Calendar, Gmail, Todoist)
+> or the local database. When evidence is insufficient, Jarvis asks — it never guesses.**
 
-## Endpoints (Phase 1 + 2A + 2B + 2C + 2C.5)
+## Endpoints (Phase 1 + 2A + 2B + 2C + 2C.5 + 2D)
 - `GET /health` — service + DB status (token required)
 - `POST /chat` — `{ "message": "...", "session_id": "default" }` → `{ "reply", "conversation_id" }`
 - `POST /capture` — `{ "text": "..." }` → `{ "id", "status": "captured" }`
@@ -38,9 +46,40 @@ roadmap.
 - `GET /memory/patterns` — (token) → detected behavioral patterns (response times, activity windows)
 - `GET /memory/commitments` — (token) → open loops: replies owed, follow-ups, flagged deadlines
 - `POST /memory/consolidate` — (token) → (re)build memory from existing data; returns row counts
+- `GET /approvals` — (token) → pending calendar actions awaiting confirmation (with confidence,
+  `required_phrase`, `item_count`, and expiry)
+- `POST /approvals/{id}/confirm` — (token) → execute that action (the only endpoint that can write)
+- `POST /approvals/{id}/cancel` — (token) → drop a pending action without executing
 
 All Gmail/state endpoints return `connected:false` with a re-consent hint until Google is connected.
 Memory endpoints work from whatever data exists (they self-consolidate once if memory is empty).
+
+## Calendar actions (Phase 2D / 2D.1 — always draft-then-confirm)
+Text Jarvis a change and it **drafts** the exact proposal — no write happens until you confirm:
+
+```
+you › move my 3pm to 4
+jarvis › Move “ARISE sync” from Thu Jul 9, 3:00 PM to Thu Jul 9, 4:00 PM
+         (confidence 70%; starts at 15:00).
+         Reply CONFIRM to apply this, or anything else to hold off.
+you › CONFIRM
+jarvis › Moved “ARISE sync” ✓
+
+you › delete all future DSI events
+jarvis › I found 3 events to delete:
+         1. DSI Orientation — Sat Jul 18, 10:00 AM (90%)
+            • title contains “dsi”
+            • recurring series
+         2. DSI Writing Workshop — Mon Jul 20, 2:00 PM (90%) …
+         Reply CONFIRM DELETE to delete these 3 events, or anything else to hold off.
+```
+
+- A **single** action confirms with `CONFIRM`; a **bulk delete** needs `CONFIRM DELETE` (a plain
+  `CONFIRM` is refused). Proposals expire (`CALENDAR_ACTION_TTL_MINUTES`, default 30).
+- Zero matches → Jarvis says so and asks; several unrelated matches → it asks which one. It never
+  fabricates an event, and rejects any write to an unknown/stale/deleted id.
+- Requires the `calendar.events` write scope: re-run `/connect_google` once — see
+  `EXTERNAL_ACTIONS.md §2.3c`.
 
 ## Connect Google (Calendar + Gmail, read-only)
 Requires the Google Cloud setup in `EXTERNAL_ACTIONS.md` §2 (enable Calendar **and** Gmail APIs + a

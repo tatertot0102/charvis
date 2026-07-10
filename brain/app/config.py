@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     workday_end_hour: int = 18
     free_time_min_slot_minutes: int = 30  # smallest gap reported as "free"
 
+    # --- Calendar resolution hardening (Phase 2D.1) ---
+    calendar_action_lookback_days: int = 7  # how far *back* resolution searches for a target event
+    calendar_action_lookahead_days: int = 180  # how far *ahead* resolution searches (bulk "future")
+    calendar_action_min_confidence: float = 0.5  # never draft/execute a match below this confidence
+    calendar_bulk_preview_count: int = 5  # how many matched events a bulk proposal previews
+    calendar_bulk_max: int = 200  # hard cap on events a single bulk action may touch
+
     # --- Memory / deep context (Phase 2C.5: consolidation over existing data) ---
     memory_email_lookback_days: int = 180  # how far back the Gmail mirror is scanned (~6 months)
     memory_calendar_back_days: int = 90  # long-range calendar lookback for consolidation

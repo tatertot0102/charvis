@@ -50,8 +50,15 @@ async def draft(
     channel: str = "telegram",
     external_id: str | None = None,
     account: str = "default",
+    confidence: float = 1.0,
+    required_phrase: str = "CONFIRM",
+    item_count: int = 1,
 ) -> PendingCalendarAction:
-    """Record a new pending action, superseding any earlier live proposal for the account."""
+    """Record a new pending action, superseding any earlier live proposal for the account.
+
+    `required_phrase` is the exact text the user must send to confirm — a bulk delete uses the
+    stronger "CONFIRM DELETE" so a plain "CONFIRM" can never fire it (Phase 2D.1).
+    """
     ttl = timedelta(minutes=get_settings().calendar_action_ttl_minutes)
     expires_at = datetime.now(UTC) + ttl
     async with get_session() as session:
@@ -66,11 +73,21 @@ async def draft(
             target_event_id=target_event_id,
             payload=payload,
             expires_at=expires_at,
+            confidence=confidence,
+            required_phrase=required_phrase,
+            item_count=item_count,
         )
         session.add(row)
         await session.commit()
         await session.refresh(row)
-    log.info("calendar_action_drafted", account=account, action_id=row.id, kind=action_type.value)
+    log.info(
+        "calendar_action_drafted",
+        account=account,
+        action_id=row.id,
+        kind=action_type.value,
+        item_count=item_count,
+        confidence=confidence,
+    )
     return row
 
 

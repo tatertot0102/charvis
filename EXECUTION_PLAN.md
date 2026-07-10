@@ -333,15 +333,40 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
   Approval flow on Telegram (one-tap CONFIRM button) + `/approvals` GET endpoint to list pending actions.
   Pending actions table: `pending_calendar_actions` (event_id, proposed_action, user_confirmation_required).
   Tests prove: no write happens without confirmation, CONFIRM executes only the prepared action, wrong
-  responses are ignored. **No email sends; no other writes yet.** Migration `0005`.
+  responses are ignored. **No email sends; no other writes yet.** Migration `0006` (`pending_calendar_actions`).
+
+- **2D.1 — Calendar Resolution Hardening (done):** Make calendar actions production-safe.
+  **Confidence-scored** event resolution (`app.calendar_actions.matching`) with provider-cited evidence:
+  title-keyword, **acronym** (DSI → Data Science Institute), **fuzzy**, attendee, location, description,
+  recurring-series, time-of-day — over configurable lookback/lookahead (`CALENDAR_ACTION_LOOKBACK_DAYS` /
+  `_LOOKAHEAD_DAYS`). Never drafts/executes below `CALENDAR_ACTION_MIN_CONFIDENCE`. **Bulk actions**
+  ("delete all future DSI events", "cancel upcoming ARISE meetings", "delete all meetings with Dana"):
+  bulk proposals list the count, the first N matches with per-event confidence + why, and require the
+  **stronger `CONFIRM DELETE` / `CONFIRM MOVE`** phrase — a plain `CONFIRM` cannot fire a bulk delete.
+  Zero matches → says so and asks; several distinct matches → asks which; **never fabricates**. The
+  execution layer re-validates every event id against Google (`calendar.get_event`) and the connector
+  raises on 404/410, so **unknown / fabricated / stale / deleted ids are rejected**. Migration `0007`
+  (`confidence`, `required_phrase`, `item_count`; bulk targets in JSON payload). Tests cover all of the
+  above plus "no hallucinated events in proposals" and "no hallucinated emails referenced".
+
+  > **Permanent engineering principle (applies to every phase from here on):** Jarvis may reason under
+  > uncertainty, but it may **never invent facts**. Every factual statement shown to the user must be
+  > traceable to evidence from a provider (Google Calendar, Gmail, Todoist) or the local database.
+  > Google Calendar / Gmail / Todoist / the DB are the **only** sources of truth. When evidence is
+  > insufficient, **ASK — never guess.** No layer (calendar actions, memory, meeting prep, Gmail lookup)
+  > may fabricate events, titles, times, attendees, email subjects/senders, projects, commitments, or
+  > people. The execution layer must reject unknown / fabricated / stale / deleted ids.
 
 - **2E — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
-  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0006`.
+  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0008`.
 - **2F — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
   Today view (timeline), waiting-on view (split), deadlines view (urgency escalation), next-action view.
 - **2G — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
   active window, via launchd), chrome-extension (active tab), android-tasker (location, battery, SMS,
-  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0007`.
+  notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0009`.
+
+> **Migration ladder (actual):** `0004` Gmail · `0005` memory · `0006` pending_calendar_actions (2D) ·
+> `0007` bulk/confidence columns (2D.1). Later phases continue from `0008`.
 
 **Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
 (labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local

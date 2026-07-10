@@ -41,31 +41,49 @@ async def request(
     return outcome.text
 
 
-async def _confirm_row(row: PendingCalendarAction) -> str:
-    """The single gate: execute a row only if it is pending and unexpired. Records the outcome."""
+def _phrase_mismatch_text(row: PendingCalendarAction, phrase: str) -> str:
+    """Explain why the reply didn't confirm this action — without executing it."""
+    required = row.required_phrase or "CONFIRM"
+    if required != "CONFIRM":
+        # A bulk/destructive action needs the stronger phrase; a plain CONFIRM must NOT fire it.
+        return (
+            f"That would affect {row.item_count} event{'s' if row.item_count != 1 else ''}. "
+            f"To be safe, reply exactly “{required}” to proceed, or “cancel” to drop it."
+        )
+    return f"Reply exactly “{required}” to apply this, or “cancel” to drop it."
+
+
+async def _confirm_row(row: PendingCalendarAction, phrase: str) -> str:
+    """The single gate: execute a row only if pending, unexpired, and confirmed with its phrase."""
     if row.status != ActionStatus.PENDING.value:
         return f"That action was already {row.status}. Ask me to draft a fresh one if you need it."
     if store.is_expired(row):
         await store.set_status(row.id, ActionStatus.EXPIRED, result="expired before confirmation")
         return "That proposal expired before you confirmed it — ask me to draft it again."
+    if phrase != (row.required_phrase or "CONFIRM"):
+        # Wrong/weaker confirmation → never execute. Leave it pending so the user can retry.
+        return _phrase_mismatch_text(row, phrase)
     try:
         message = await execute.execute_action(row)
     except execute.ExecutionError as exc:
         await store.set_status(row.id, ActionStatus.FAILED, result=str(exc))
         return str(exc)
     await store.set_status(row.id, ActionStatus.EXECUTED, result=message)
-    log.info("calendar_action_executed", action_id=row.id, kind=row.action_type)
+    log.info("calendar_action_executed", action_id=row.id, kind=row.action_type, phrase=phrase)
     return message
 
 
-async def confirm_latest(account: str = "default") -> str:
-    """Confirm the most recent pending action (what an exact 'CONFIRM' reply triggers)."""
+async def confirm_latest(account: str = "default", phrase: str = "CONFIRM") -> str:
+    """Confirm the most recent pending action. `phrase` is the exact text the user sent.
+
+    A bulk delete requires "CONFIRM DELETE"; a plain "CONFIRM" will not fire it (Phase 2D.1).
+    """
     row = await store.latest_pending(account)
     if row is None:
         return _NOTHING
     # Only the latest may execute; retire any older stragglers so they can't fire later.
     await store.supersede_pending(account, except_id=row.id)
-    return await _confirm_row(row)
+    return await _confirm_row(row, phrase)
 
 
 async def cancel_latest(account: str = "default") -> str:
@@ -77,14 +95,21 @@ async def cancel_latest(account: str = "default") -> str:
     return f"Okay — cancelled that pending change ({row.action_type})."
 
 
-async def confirm_by_id(action_id: int, account: str | None = None) -> tuple[bool, str]:
-    """Confirm a specific pending action (endpoint path). Returns (found, message)."""
+async def confirm_by_id(
+    action_id: int, account: str | None = None, phrase: str | None = None
+) -> tuple[bool, str]:
+    """Confirm a specific pending action (endpoint path). Returns (found, message).
+
+    The endpoint is explicit intent, so it confirms with the action's own required phrase by default
+    (a bulk delete still executes), but the confirmation gate — pending + unexpired + valid ids —
+    is unchanged.
+    """
     row = await store.get(action_id)
     if row is None:
         return False, "No such pending action."
     if account is not None:
         await store.supersede_pending(row.account, except_id=row.id)
-    return True, await _confirm_row(row)
+    return True, await _confirm_row(row, phrase or (row.required_phrase or "CONFIRM"))
 
 
 async def cancel_by_id(action_id: int) -> tuple[bool, str]:

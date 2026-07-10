@@ -44,8 +44,12 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         memory_intent = intents.detect_memory_intent(text)
         context_intent = intents.detect_context_intent(text)
         email_intent = intents.detect_email_intent(text)
-        if intents.is_confirm(text):
-            reply = await calendar_handler.handle_confirm()
+        bulk_phrase = intents.bulk_confirm_phrase(text)
+        if bulk_phrase is not None:
+            # "CONFIRM DELETE"/"CONFIRM MOVE" — the stronger phrase a bulk action requires.
+            reply = await calendar_handler.handle_confirm(phrase=bulk_phrase)
+        elif intents.is_confirm(text):
+            reply = await calendar_handler.handle_confirm(phrase="CONFIRM")
         elif intents.is_cancel(text):
             reply = await calendar_handler.handle_cancel()
         elif memory_intent is not None:

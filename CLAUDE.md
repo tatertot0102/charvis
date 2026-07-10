@@ -23,6 +23,12 @@
    Tailscale. Keep them dumb; all reasoning stays in the brain.
 6. **Prove the deploy path before building features.** Phase 0 is an empty container that a
    phone can reach over Tailscale. Do that first.
+7. **Reason, never fabricate (permanent).** Jarvis may reason under uncertainty — infer confidence,
+   rank possibilities, ask clarifying questions — but it may **never invent facts**. Google Calendar,
+   Gmail, Todoist, and the local database are the **only** sources of truth. Every factual statement
+   shown to me (events, titles, times, attendees, email subjects/senders, projects, commitments,
+   people) must be traceable to provider-backed or DB-backed evidence. When evidence is insufficient,
+   **ASK — never guess.** The execution layer must reject unknown / fabricated / stale / deleted ids.
 
 ---
 
@@ -293,6 +299,14 @@ the frontend.
     Endpoints `GET /approvals`, `POST /approvals/{id}/{confirm,cancel}`. Tests prove: no write without
     confirmation, only the latest pending confirms, wrong/expired confirmations don't execute, ambiguous
     requests ask a clarifying question. No email sends; no other writes yet.
+  - **2D.1 (done):** Calendar Resolution Hardening. **Confidence-scored** event resolution with cited
+    evidence (title-keyword, **acronym** DSI→Data Science Institute, fuzzy, attendee, location,
+    description, recurring-series, time-of-day) over configurable lookback/lookahead. **Bulk actions**
+    ("delete all future DSI events") that list count + first-N matches + per-event confidence + why,
+    and require the stronger **`CONFIRM DELETE`** (a plain `CONFIRM` can't fire a bulk delete). Zero
+    matches → asks, never fabricates; several distinct → asks which. Execution re-validates every id
+    against Google — unknown/fabricated/stale/deleted ids are rejected (Golden Rule #7). Migration
+    `0007`. Enshrines the permanent no-fabrication principle.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
   - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).

@@ -31,6 +31,14 @@ class WriteScopeError(RuntimeError):
     """Raised when the stored credential lacks calendar.events (operator must re-consent)."""
 
 
+class RejectedEventError(RuntimeError):
+    """Raised when a write targets an id Google doesn't know (unknown/fabricated/deleted).
+
+    A 404/410 from Google means the event id is not a real, live provider object — exactly the
+    anti-hallucination case. We surface it distinctly so the caller never reports a bogus success.
+    """
+
+
 async def _write_credentials(account: str) -> Credentials:
     creds = await tokens.load_credentials(account)
     if creds is None:
@@ -43,9 +51,16 @@ def _time_field(when: datetime) -> dict:
     return {"dateTime": when.isoformat()}
 
 
+def _status(exc: HttpError) -> int | None:
+    return getattr(getattr(exc, "resp", None), "status", None)
+
+
 def _as_scope_error(exc: HttpError) -> bool:
-    status = getattr(getattr(exc, "resp", None), "status", None)
-    return status in (401, 403)
+    return _status(exc) in (401, 403)
+
+
+def _as_rejected_id(exc: HttpError) -> bool:
+    return _status(exc) in (404, 410)
 
 
 def _insert_event(creds: Credentials, body: dict) -> dict:
@@ -118,6 +133,8 @@ async def update_event(
     except HttpError as exc:
         if _as_scope_error(exc):
             raise WriteScopeError(str(exc)) from exc
+        if _as_rejected_id(exc):
+            raise RejectedEventError(event_id) from exc
         raise
     log.info("calendar_event_updated", account=account, event_id=event_id)
     return patched
@@ -131,5 +148,7 @@ async def delete_event(event_id: str, account: str = "default") -> None:
     except HttpError as exc:
         if _as_scope_error(exc):
             raise WriteScopeError(str(exc)) from exc
+        if _as_rejected_id(exc):
+            raise RejectedEventError(event_id) from exc
         raise
     log.info("calendar_event_deleted", account=account, event_id=event_id)

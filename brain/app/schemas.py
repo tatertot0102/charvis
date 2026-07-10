@@ -230,6 +230,9 @@ class PendingActionOut(BaseModel):
     status: str  # pending | executed | cancelled | expired | superseded | failed
     summary: str  # the exact proposed change shown to the user
     target_event_id: str | None = None
+    confidence: float = 1.0  # resolution confidence (Phase 2D.1)
+    required_phrase: str = "CONFIRM"  # exact text needed to confirm (bulk → "CONFIRM DELETE")
+    item_count: int = 1  # how many events this action touches
     proposed_at: str | None = None  # ISO 8601
     expires_at: str | None = None  # ISO 8601
     resolved_at: str | None = None  # ISO 8601

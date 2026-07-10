@@ -319,6 +319,13 @@ class PendingCalendarAction(Base):
     summary: Mapped[str] = mapped_column(Text)  # exact proposed change, shown to the user
     target_event_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)  # everything execute() needs
+    # --- Phase 2D.1: confidence-aware + bulk-safe ---
+    # For a bulk action, payload["targets"] holds the full list of provider-backed events
+    # (event_id + title + start), item_count is how many, and required_phrase is the stronger
+    # phrase the user must type ("CONFIRM DELETE") so a plain "CONFIRM" can't fire a bulk delete.
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)  # resolution confidence 0.0–1.0
+    required_phrase: Mapped[str] = mapped_column(String(32), default="CONFIRM")  # exact confirm text
+    item_count: Mapped[int] = mapped_column(default=1)  # number of events this action touches
     result: Mapped[str | None] = mapped_column(Text, nullable=True)  # executed id or error detail
     proposed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -17,8 +17,8 @@ _NO_KEY = "I can't read your calendar yet — the encryption key isn't configure
 _ERROR = "Sorry — I couldn't check your calendar just now. Try again in a moment."
 
 
-async def handle_confirm(account: str = "default") -> str:
-    return await service.confirm_latest(account)
+async def handle_confirm(account: str = "default", phrase: str = "CONFIRM") -> str:
+    return await service.confirm_latest(account, phrase=phrase)
 
 
 async def handle_cancel(account: str = "default") -> str:

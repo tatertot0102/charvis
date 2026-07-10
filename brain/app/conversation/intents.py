@@ -251,9 +251,21 @@ _FREE_TIME_PHRASES = (
 )
 
 
+# Bulk/destructive actions require a stronger, explicit phrase so a plain "confirm" can't fire them.
+_BULK_CONFIRM_PHRASES = {
+    "confirm delete": "CONFIRM DELETE",
+    "confirm move": "CONFIRM MOVE",
+}
+
+
 def is_confirm(text: str) -> bool:
-    """True only when the whole message is exactly a confirmation word (the write gate)."""
+    """True only when the whole message is exactly a confirmation word (the single-action gate)."""
     return _normalize(text) in _CONFIRM_WORDS
+
+
+def bulk_confirm_phrase(text: str) -> str | None:
+    """Canonical bulk-confirm phrase if the whole message is exactly one (e.g. 'CONFIRM DELETE')."""
+    return _BULK_CONFIRM_PHRASES.get(_normalize(text))
 
 
 def is_cancel(text: str) -> bool:

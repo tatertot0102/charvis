@@ -38,6 +38,12 @@ class CalendarEvent:
     event_id: str = ""
     description: str = ""
     attendees: tuple[str, ...] = ()  # attendee email addresses (lowercased)
+    recurring_event_id: str = ""  # set on instances of a recurring series (Phase 2D.1)
+
+    @property
+    def recurring(self) -> bool:
+        """True when this event is one instance of a recurring series."""
+        return bool(self.recurring_event_id)
 
 
 def _resolve_tz() -> ZoneInfo:
@@ -86,6 +92,7 @@ def _parse_event(raw: dict, tz: ZoneInfo) -> CalendarEvent:
         event_id=raw.get("id") or "",
         description=raw.get("description") or "",
         attendees=_parse_attendees(raw),
+        recurring_event_id=raw.get("recurringEventId") or "",
     )
 
 
@@ -219,6 +226,38 @@ async def list_events_range(
     events = [_parse_event(e, tz) for e in raw]
     log.info("calendar_range_fetched", account=account, count=len(events))
     return events
+
+
+def _fetch_event(creds: Credentials, tz: ZoneInfo, event_id: str) -> dict | None:
+    """Fetch one event by id. Returns None on 404/410 (unknown/deleted). Run via asyncio.to_thread."""
+    from googleapiclient.errors import HttpError
+
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    try:
+        return service.events().get(calendarId=_PRIMARY_CALENDAR, eventId=event_id).execute()
+    except HttpError as exc:
+        status = getattr(getattr(exc, "resp", None), "status", None)
+        if status in (404, 410):
+            return None
+        raise
+
+
+async def get_event(event_id: str, account: str = "default") -> CalendarEvent | None:
+    """Provider-truth lookup of a single event. None when it doesn't exist (the anti-stale guard).
+
+    This is the read the execution layer uses to prove a target id is real and still present before
+    it ever mutates anything — fabricated, unknown, or already-deleted ids resolve to None.
+    """
+    if not event_id:
+        return None
+    creds = await tokens.load_credentials(account)
+    if creds is None:
+        raise NotConnectedError("Google Calendar is not connected.")
+    tz = _resolve_tz()
+    raw = await asyncio.to_thread(_fetch_event, creds, tz, event_id)
+    if raw is None or raw.get("status") == "cancelled":
+        return None
+    return _parse_event(raw, tz)
 
 
 def next_timed_event(events: list[CalendarEvent], now: datetime | None = None) -> CalendarEvent | None:

@@ -52,3 +52,38 @@ def test_non_action_message_returns_none():
     assert parse.detect("what's my day look like?") is None
     assert parse.detect("anything important in my email?") is None
     assert parse.detect("") is None
+
+
+# --- Phase 2D.1: bulk + attendee parsing -------------------------------------
+
+
+def test_delete_all_future_is_bulk():
+    req = parse.detect("delete all future DSI events")
+    assert req.action_type is ActionType.DELETE
+    assert req.bulk is True
+    assert req.target_hint == "dsi"
+
+
+def test_cancel_upcoming_is_bulk():
+    req = parse.detect("cancel upcoming ARISE meetings")
+    assert req.action_type is ActionType.DELETE
+    assert req.bulk is True
+    assert "arise" in (req.target_hint or "")
+
+
+def test_every_future_physics_class_is_bulk():
+    req = parse.detect("remove every future physics class")
+    assert req.bulk is True
+    assert "physics" in (req.target_hint or "")
+
+
+def test_with_attendee_parses_attendee_hint():
+    req = parse.detect("delete all meetings with Dana")
+    assert req.action_type is ActionType.DELETE
+    assert req.bulk is True
+    assert req.attendee_hint == "dana"
+
+
+def test_single_request_is_not_bulk():
+    req = parse.detect("cancel my 3pm standup")
+    assert req.bulk is False

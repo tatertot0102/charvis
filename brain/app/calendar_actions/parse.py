@@ -26,6 +26,15 @@ _CREATE_VERBS = (
 _TOMORROW = ("tomorrow", "tmrw", "tmr")
 _TODAY = ("today", "this afternoon", "this morning", "tonight", "this evening")
 
+# Bulk quantifiers → operate on the whole matched set ("delete all future DSI events",
+# "cancel upcoming ARISE meetings"). Plurals alone don't trigger bulk — the marker must be explicit.
+_BULK_MARKERS = ("all", "every", "each", "upcoming", "future")
+# "… with Dana" → match by attendee rather than title. Capture the name up to a time/day/stopword.
+_ATTENDEE_RE = re.compile(
+    r"\bwith\s+([a-z0-9.@]+(?:\s+[a-z0-9.@]+)?)"
+    r"(?=\s+(?:on|at|about|tomorrow|today|tonight|this|next|to|for|by)\b|$)"
+)
+
 # One left-to-right, non-overlapping scanner so times are captured *in order* — the first time in a
 # move is the target ("my 3pm"), the last is the destination ("to 4").
 _TIME_SCANNER = re.compile(
@@ -116,13 +125,28 @@ def _first_verb(normalized: str, verbs: tuple[str, ...]) -> str | None:
 # Words that never belong in an event's name/target hint.
 _NOISE = frozenset(
     {
-        "my", "the", "a", "an", "to", "at", "for", "by", "on", "meeting", "event", "appointment",
+        "my", "the", "a", "an", "to", "at", "for", "by", "on", "meeting", "meetings", "event",
+        "events", "appointment", "appointments", "session", "sessions", "class", "classes",
         "please", "can", "you", "me", "i", "with", "and", "from", "of", "it", "that", "this",
-        "am", "pm", "oclock", "call", "tomorrow", "today", "tonight", "morning", "afternoon",
-        "evening", "next", "up", "off", "out", "new", "noon", "midnight",
-        "min", "mins", "minute", "minutes", "hour", "hours", "hr", "hrs", "oclock",
+        "am", "pm", "oclock", "call", "calls", "tomorrow", "today", "tonight", "morning",
+        "afternoon", "evening", "next", "up", "off", "out", "new", "noon", "midnight",
+        "min", "mins", "minute", "minutes", "hour", "hours", "hr", "hrs",
+        # Bulk quantifiers / scope words — not part of an event name.
+        "all", "every", "each", "future", "upcoming", "remaining", "any",
     }
 )
+
+
+def _is_bulk(normalized: str) -> bool:
+    return any(re.search(rf"\b{re.escape(m)}\b", normalized) for m in _BULK_MARKERS)
+
+
+def _attendee_hint(normalized: str) -> str | None:
+    match = _ATTENDEE_RE.search(normalized)
+    if not match:
+        return None
+    name = " ".join(w for w in match.group(1).split() if w not in _NOISE)
+    return name or None
 
 
 def _strip_verbs_and_times(normalized: str) -> str:
@@ -133,10 +157,12 @@ def _strip_verbs_and_times(normalized: str) -> str:
     return " ".join(cleaned.split())
 
 
-def _hint(normalized: str) -> str | None:
-    """Distinctive words that name the target event / new event, noise removed."""
+def _hint(normalized: str, drop: set[str] = frozenset()) -> str | None:
+    """Distinctive words that name the target event / new event, noise (and `drop`) removed."""
     cleaned = _strip_verbs_and_times(normalized)
-    words = [w for w in cleaned.split() if w not in _NOISE and not w.isdigit()]
+    words = [
+        w for w in cleaned.split() if w not in _NOISE and w not in drop and not w.isdigit()
+    ]
     return " ".join(words) if words else None
 
 
@@ -152,7 +178,11 @@ def detect(text: str) -> ParsedRequest | None:
 
     times = _all_times(normalized)
     day_offset = _day_offset(normalized)
-    hint = _hint(normalized)
+    bulk = _is_bulk(normalized)
+    attendee_hint = _attendee_hint(normalized)
+    # Keep attendee tokens out of the title hint so "meetings with Dana" matches by attendee only.
+    drop = set(attendee_hint.split()) if attendee_hint else set()
+    hint = _hint(normalized, drop=drop)
 
     if delete_verb:
         # Any time in a delete names the target ("cancel my 3pm").
@@ -160,6 +190,8 @@ def detect(text: str) -> ParsedRequest | None:
             action_type=ActionType.DELETE,
             target_hint=hint,
             target_time=times[0] if times else None,
+            bulk=bulk,
+            attendee_hint=attendee_hint,
         )
     if update_verb:
         # Two times → first identifies the target, last is the destination. One time → destination.
@@ -171,6 +203,8 @@ def detect(text: str) -> ParsedRequest | None:
             target_time=target_time,
             new_time=new_time,
             day_offset=day_offset,
+            bulk=bulk,
+            attendee_hint=attendee_hint,
         )
     if create_verb:
         return ParsedRequest(
