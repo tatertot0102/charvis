@@ -456,3 +456,55 @@ def detect_email_event_search(text: str) -> tuple[bool, str | None] | None:
     if has_email and has_event and searchy:
         return (True, _extract_person_scope(normalized))
     return None
+
+
+# --- Phase 2D.3 integration: entity / relationship questions -----------------
+#
+# "What is ARISE?", "What is LuAnn related to?", "What do you know about my college applications?"
+# route to the Unified Knowledge Engine, which merges EVERY provider for that entity. Deliberately
+# conservative: self/temporal/schedule/email phrasings are excluded so dedicated intents keep them.
+
+_ENTITY_ABOUT_RES = (
+    re.compile(r"^(?:what is|whats|what are)\s+(.+?)\s+"
+               r"(?:related to|connected to|associated with|linked to|about)$"),
+    re.compile(r"^(?:tell me about|what do you know about|what have you got on|"
+               r"what is going on with|whats going on with|whats the story with)\s+(.+)$"),
+)
+_ENTITY_WHO_RES = (re.compile(r"^(?:who is|whos)\s+(.+)$"),)
+_ENTITY_WHATIS_RES = (re.compile(r"^(?:what is|whats)\s+(.+)$"),)
+
+_ENTITY_SELF = frozenset({"me", "myself", "my life", "i", "you", "yourself"})
+_ENTITY_STOP_TOPICS = (
+    "calendar", "schedule", "email", "inbox", "week", "day", "month", "meeting", "agenda",
+    "deadline", "free time", "next action", "waiting",
+)
+_ENTITY_STOP_LEAD = frozenset(
+    {"on", "in", "the", "a", "an", "today", "tomorrow", "this", "next", "up", "going",
+     "happening", "there", "it", "that", "here", "left", "due"}
+)
+
+
+def detect_entity_query(text: str) -> str | None:
+    """Extract the entity a "what is X / what is X related to / what do you know about X" asks about.
+
+    Returns the cleaned subject, or None when the message isn't an entity question (or is really a
+    self/schedule/email question that a dedicated intent should own).
+    """
+    normalized = _normalize(text)
+    subject: str | None = None
+    for pattern in (*_ENTITY_ABOUT_RES, *_ENTITY_WHO_RES, *_ENTITY_WHATIS_RES):
+        match = pattern.match(normalized)
+        if match:
+            subject = match.group(1).strip()
+            break
+    if not subject:
+        return None
+    subject = re.sub(r"^(?:my|your|our)\s+", "", subject).strip()
+    if not subject or subject in _ENTITY_SELF:
+        return None
+    tokens = subject.split()
+    if tokens[0] in _ENTITY_STOP_LEAD or len(tokens) > 6:
+        return None
+    if any(topic in subject for topic in _ENTITY_STOP_TOPICS):
+        return None
+    return subject

@@ -19,6 +19,7 @@ from app.commitments import parse as cparse
 from app.commitments import store as commitments
 from app.commitments.parse import RecurrenceSpec
 from app.config import get_settings
+from app.knowledge import entities
 from app.telemetry import get_logger
 
 log = get_logger(__name__)
@@ -48,10 +49,23 @@ async def handle(
 
 
 async def _handle_naming(title: str, account: str) -> str:
-    """Record what a thing is really called. Memory only — never a calendar change, never claims one."""
+    """Record what a thing is really called. Memory only — never a calendar change, never claims one.
+
+    Also records a PERMANENT alias in the knowledge store: whatever the prior referent was (the most
+    recent commitment) becomes an alias of this corrected name, so every future knowledge query for the
+    old name resolves automatically (Phase 2D.3, behaviors 7/8).
+    """
+    prior = await commitments.latest(account)
     await commitments.upsert(
         account=account, title=title, confidence=0.7, evidence_source="conversation"
     )
+    try:
+        old_name = prior.title if prior is not None else title
+        await entities.record_correction(
+            old_name, title, entity_type="commitment", account=account
+        )
+    except Exception as exc:  # noqa: BLE001 — an alias-store hiccup must never break the reply.
+        log.warning("record_correction_failed", error=str(exc))
     return (
         f"Got it — I'll remember this as “{title}”. "
         "(I've noted that for myself; I haven't changed anything on your calendar.)"

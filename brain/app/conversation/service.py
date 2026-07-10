@@ -15,6 +15,7 @@ from app.conversation import (
     email_event_handler,
     email_handler,
     intents,
+    knowledge_handler,
     memory_handler,
     schedule_range_handler,
     task_state,
@@ -55,6 +56,7 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         email_event = intents.detect_email_event_search(text)
         verify_intent = intents.detect_calendar_verification(text)
         schedule_range = intents.detect_schedule_range(text)
+        entity_subject = intents.detect_entity_query(text)
         bulk_phrase = intents.bulk_confirm_phrase(text)
         if bulk_phrase is not None:
             # "CONFIRM DELETE"/"CONFIRM MOVE" — the stronger phrase a bulk action requires.
@@ -63,6 +65,15 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
             reply = await calendar_handler.handle_confirm(phrase="CONFIRM")
         elif intents.is_cancel(text):
             reply = await calendar_handler.handle_cancel()
+        elif entity_subject is not None:
+            # "what is ARISE / what is LuAnn related to / what do you know about X" — merge every
+            # provider through the Knowledge Engine (Phase 2D.3). Checked before memory so a specific
+            # subject isn't swallowed by the generic "what do you know about me" matcher.
+            reply = await knowledge_handler.handle_entity(entity_subject)
+            await task_state.remember(
+                session, conversation.id, intent="entity_query",
+                query=text, unresolved_reference=entity_subject,
+            )
         elif memory_intent is not None:
             reply = await memory_handler.handle(*memory_intent)
         elif email_event is not None:
@@ -228,6 +239,15 @@ async def _handle_followup(session, conversation_id: int, text: str) -> str | No
         await task_state.remember(
             session, conversation_id, intent="calendar_verification",
             source_types=["calendar"], query=text, unresolved_reference=subject,
+        )
+        return reply
+
+    if active.active_intent == "entity_query" and task_state.looks_like_bare_reference(text):
+        subject = text.strip()
+        reply = await knowledge_handler.handle_entity(subject)
+        await task_state.remember(
+            session, conversation_id, intent="entity_query",
+            query=text, unresolved_reference=subject,
         )
         return reply
 

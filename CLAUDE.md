@@ -320,6 +320,23 @@ the frontend.
     them with a safe message; Jarvis says "I updated your schedule" ONLY after proposal→CONFIRM→write→
     snapshot rebuild. Deleting a calendar event NEVER erases a commitment. Migration `0008`. Read-mostly:
     no email sends; all writes still draft-then-confirm.
+  - **2D.3 (a done; b–d engine landed, live-verify pending):** Unified Truth + Knowledge Engine.
+    Migration `0009` (knowledge_entities/entity_aliases/knowledge_facts/knowledge_evidence/
+    knowledge_conflicts + conversation_task_state). **2D.3a (truth routing core):** `app/query/`
+    (ranges, StructuredAnswer, hardened validator), `app/sources/registry` (live capability truth),
+    `conversation/task_state` (cross-turn continuity), schedule-range/verify/email-event handlers,
+    router rewrite, paginated calendar range reads. **2D.3b–d (integration):** `app/knowledge/` — the
+    single **Unified Knowledge Engine**. Every subsystem is now a **provider** (Calendar, Gmail,
+    Commitment, Memory, Pattern, Waiting, Conversation); `knowledge.query(...)` runs them in parallel
+    and merges into ONE **WorldModel** with **reality labels** (Verified / Likely / Remembered /
+    Inferred — never mixed), **canonical entity resolution** with permanent aliases (corrections like
+    "it is ECE Machine Learning Lab" alias the old name forever), **conflict detection** (a remembered
+    recurring commitment the calendar can't confirm is surfaced, never hidden), live source status, and
+    confidence. Schedule + "what is X / what is X related to / what do you know about X" route through
+    the engine; the conversation layer is a thin adapter; the future dashboard consumes the same
+    WorldModel. Automated tests are mocked (375 green); **live verification against the real Google
+    account and the `phase-2d3-integrated` tag are DEFERRED until Google is connected** (dev account
+    currently unconnected). No new external integrations; calendar writes still draft-then-confirm.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
   - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).
