@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from app.calendar_actions import execute, parse, propose, store
 from app.calendar_actions.schema import ActionStatus
+from app.calendar_state import snapshots
 from app.db.models import PendingCalendarAction
 from app.security.crypto import EncryptionUnavailableError
 from app.telemetry import get_logger
@@ -70,7 +71,19 @@ async def _confirm_row(row: PendingCalendarAction, phrase: str) -> str:
         return str(exc)
     await store.set_status(row.id, ActionStatus.EXECUTED, result=message)
     log.info("calendar_action_executed", action_id=row.id, kind=row.action_type, phrase=phrase)
+    await _refresh_snapshots(row.account)
     return message
+
+
+async def _refresh_snapshots(account: str) -> None:
+    """After a confirmed write, re-mirror reality so the next week/schedule answer isn't stale.
+
+    Best-effort: a failed refresh must never turn a successful write into an error to the user.
+    """
+    try:
+        await snapshots.rebuild(account)
+    except Exception as exc:  # noqa: BLE001 — the write already succeeded; just log a stale cache.
+        log.warning("snapshot_refresh_failed", account=account, error=str(exc))
 
 
 async def confirm_latest(account: str = "default", phrase: str = "CONFIRM") -> str:

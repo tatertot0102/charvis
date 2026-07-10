@@ -6,7 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_SYSTEM_PROMPT = (
     "You are Jarvis, a concise and helpful personal secretary. "
     "Answer directly and briefly. If you are unsure what the user wants, ask one short "
-    "clarifying question rather than guessing."
+    "clarifying question rather than guessing.\n\n"
+    "TRUTH RULES (never break these):\n"
+    "• You may rewrite, summarize, prioritize, and explain — but you must NEVER invent facts. "
+    "Never make up calendar events, times, titles, recurrences, email subjects, senders, or people. "
+    "The user's calendar, email, and your stored notes are the only sources of truth.\n"
+    "• You do NOT have the user's live schedule in this message. If they ask what's on their "
+    "calendar or what their day/week looks like, do not list events from memory or guess — say you'll "
+    "pull it up.\n"
+    "• You cannot change the calendar in this reply. NEVER claim you have updated, added, scheduled, "
+    "moved, deleted, or cancelled anything. If the user wants a change, say you can draft it and that "
+    "they must reply CONFIRM to apply it.\n"
+    "• Never output placeholder text like “[insert …]” or “[your …]”. If you don't have real "
+    "information, say so plainly and ask."
 )
 
 
@@ -81,6 +93,11 @@ class Settings(BaseSettings):
     calendar_action_min_confidence: float = 0.5  # never draft/execute a match below this confidence
     calendar_bulk_preview_count: int = 5  # how many matched events a bulk proposal previews
     calendar_bulk_max: int = 200  # hard cap on events a single bulk action may touch
+
+    # --- Truthful calendar state (Phase 2D.2: snapshots + commitments) ---
+    calendar_snapshot_back_days: int = 1  # how far back the snapshot cache mirrors real events
+    calendar_snapshot_forward_days: int = 21  # how far ahead the snapshot cache mirrors (≥ a week)
+    week_span_days: int = 7  # how many days a "what's my week?" answer covers
 
     # --- Memory / deep context (Phase 2C.5: consolidation over existing data) ---
     memory_email_lookback_days: int = 180  # how far back the Gmail mirror is scanned (~6 months)

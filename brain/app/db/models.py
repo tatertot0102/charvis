@@ -6,11 +6,15 @@ waiting_items (waiting-on ledger).
 Phase 2C.5 (deep context / memory): durable_conclusions, detected_patterns,
 extracted_commitments, contexts, entity_contexts — the evidence-backed model of "me".
 Phase 2D (calendar actions with confirmation): pending_calendar_actions — the approval queue.
+Phase 2D.2 (truthful calendar state): calendar_snapshots (provider-backed cache of real events,
+the ONLY source for week/schedule answers) and commitments (durable life understanding of recurring
+obligations — never erased by deleting a calendar event).
 """
 from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -370,3 +374,72 @@ class EntityContext(Base):
     )
 
     context: Mapped["Context"] = relationship(back_populates="entity_links")
+
+
+# --- Phase 2D.2: truthful calendar state -------------------------------------
+#
+# Reality (Google Calendar) → snapshots (this cache) → commitments (durable understanding).
+# Snapshots are a provider-backed mirror of the real events in a window; they are the ONLY thing
+# week/schedule answers read, so Jarvis can never invent a schedule. Commitments are our own memory
+# of recurring obligations and are updated by conversation — but a calendar deletion never erases one.
+
+
+class CalendarSnapshot(Base):
+    """A provider-backed mirror of one real Google Calendar event (Phase 2D.2).
+
+    Every row corresponds to an event Google actually returned — never fabricated. `rebuild()` upserts
+    the current window and prunes rows Google no longer returns, so the snapshot is always fresh truth.
+    Week/schedule replies read ONLY these rows (never the LLM, conversation, or memory).
+    """
+
+    __tablename__ = "calendar_snapshots"
+    __table_args__ = (
+        UniqueConstraint("account", "provider_event_id", name="uq_snapshot_account_event"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    provider_event_id: Mapped[str] = mapped_column(String(1024))
+    recurring_event_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    attendees: Mapped[list] = mapped_column(JSON, default=list)  # attendee emails
+    description: Mapped[str] = mapped_column(Text, default="")
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(32), default="confirmed")
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Commitment(Base):
+    """A durable understanding of a recurring obligation — the life model of "what I actually do".
+
+    Distinct from ExtractedCommitment (a one-off owed item): this is a standing thing like "ECE
+    Machine Learning Lab", "ARISE", "Camp Counselor". Conversation corrects it ("it is X",
+    "it's every weekday 10–2"); it may link to calendar events, but deleting those events must NEVER
+    delete the commitment. One row per (account, key).
+    """
+
+    __tablename__ = "commitments"
+    __table_args__ = (UniqueConstraint("account", "key", name="uq_commitment_account_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    key: Mapped[str] = mapped_column(String(320))  # normalized title — the identity
+    title: Mapped[str] = mapped_column(Text)  # display title, original casing
+    type: Mapped[str | None] = mapped_column(String(48), nullable=True)  # class | project | job | …
+    schedule_summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # "every weekday 10–2"
+    recurrence: Mapped[str | None] = mapped_column(Text, nullable=True)  # an RRULE string
+    contexts: Mapped[list] = mapped_column(JSON, default=list)  # overlapping life-domains
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)  # {conversation: n, sources: [...]}
+    linked_event_ids: Mapped[list] = mapped_column(JSON, default=list)  # provider event ids
+    linked_email_ids: Mapped[list] = mapped_column(JSON, default=list)  # gmail ids
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | archived
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

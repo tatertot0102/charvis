@@ -307,6 +307,19 @@ the frontend.
     matches → asks, never fabricates; several distinct → asks which. Execution re-validates every id
     against Google — unknown/fabricated/stale/deleted ids are rejected (Golden Rule #7). Migration
     `0007`. Enshrines the permanent no-fabrication principle.
+  - **2D.2 (done):** Truthful Calendar State + Persistent Commitments. Fixes a real hallucination bug
+    (after deleting DSI events, "what is my week?" made Jarvis invent a schedule + placeholder text +
+    a false "I've updated your schedule"). Architecture: reality (Google) → **calendar_snapshots**
+    (provider-backed cache) → **commitments** (durable life understanding) → memory → resolver.
+    Week/schedule queries answered **deterministically from snapshots** (rebuild-then-read = always
+    fresh), never the LLM/conversation/memory. **Commitments** table (distinct from `ExtractedCommitment`):
+    naming corrections ("it is ECE Machine Learning Lab") update memory and NEVER touch/claim a calendar
+    change; a recurrence statement ("it's every weekday 10–2") stores evidence + drafts a CONFIRM-gated
+    recurring create (RRULE support added to `calendar_write`/`execute`). **Truth guard** (core fix):
+    hardened system prompt + post-filter that blocks placeholder text and false write-claims, replacing
+    them with a safe message; Jarvis says "I updated your schedule" ONLY after proposal→CONFIRM→write→
+    snapshot rebuild. Deleting a calendar event NEVER erases a commitment. Migration `0008`. Read-mostly:
+    no email sends; all writes still draft-then-confirm.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
   - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).

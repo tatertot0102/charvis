@@ -120,8 +120,10 @@ class WriteSpy:
         self.deleted: list[str] = []
 
     def install(self, monkeypatch, calendar_write, *, monkeypatch_validation=True, valid_ids=None) -> None:
-        async def _create(*, summary, start, end, location=None, account="default"):
-            self.created.append({"summary": summary, "start": start, "end": end})
+        async def _create(*, summary, start, end, location=None, recurrence=None, account="default"):
+            self.created.append(
+                {"summary": summary, "start": start, "end": end, "recurrence": recurrence}
+            )
             return {"id": "new-event-id", "htmlLink": "https://cal/new"}
 
         async def _update(event_id, *, start=None, end=None, summary=None, location=None, account="default"):

@@ -82,6 +82,7 @@ async def _execute_create(account: str, payload: dict) -> str:
             start=_dt(payload["start"]),
             end=_dt(payload["end"]),
             location=payload.get("location"),
+            recurrence=payload.get("recurrence"),
             account=account,
         )
     except calendar_write.WriteScopeError as exc:

@@ -357,8 +357,24 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
   > may fabricate events, titles, times, attendees, email subjects/senders, projects, commitments, or
   > people. The execution layer must reject unknown / fabricated / stale / deleted ids.
 
+- **2D.2 — Truthful Calendar State + Persistent Commitments (done):** Structural cure for a real
+  hallucination bug — after deleting DSI events, "what is my week?" made Jarvis invent a schedule,
+  emit placeholder scaffolding ("[insert existing events]"), and falsely claim "I've updated your
+  schedule" with no write. Root cause: week/range queries had no intent, so they fell through to the
+  raw-LLM path. Architecture: reality (Google) → **`calendar_snapshots`** (provider-backed cache,
+  `app.calendar_state.snapshots`) → **`commitments`** (durable life understanding) → memory → resolver;
+  conversation is *evidence*, never truth. Week/schedule queries (`app.calendar_state.schedule`) are
+  answered **deterministically from snapshots** — rebuild-then-read guarantees freshness, so a deleted
+  event vanishes from the answer and nothing can be invented. **Commitments** (distinct from
+  `ExtractedCommitment`): naming corrections ("it is ECE Machine Learning Lab") update memory and NEVER
+  touch or claim a calendar change; recurrence statements ("it's every weekday 10–2") store evidence and
+  draft a **CONFIRM-gated** recurring create (RRULE support added to `calendar_write.create_event` /
+  `execute`). **Truth guard** (`app.conversation.truth_guard`): hardened system prompt + post-filter on
+  the generic LLM branch that blocks placeholder text and false calendar-write claims, replacing them
+  with a safe message. After any confirmed write, snapshots are rebuilt before answering. Deleting a
+  calendar event NEVER erases a commitment. Migration `0008`. All writes remain draft-then-confirm.
 - **2E — Todoist read:** Todoist OAuth connector (tasks, projects, due dates, completion). `GET /todoist/tasks`,
-  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0008`.
+  `GET /todoist/upcoming`. Telegram task intents ("show my tasks", "what's overdue?"). Migration `0009`.
 - **2F — Dashboard:** Read-only React/Vite SPA (no auth, talks only to brain API over Tailscale).
   Today view (timeline), waiting-on view (split), deadlines view (urgency escalation), next-action view.
 - **2G — Device context / Native agents:** Agents outside container, POST to brain. mac-agent (running apps,
@@ -366,7 +382,8 @@ read, Gmail read, `/state/today`, morning briefing). Everything write-related is
   notifications). `POST /ingest/{source}`, `GET /state/context`. Migration `0009`.
 
 > **Migration ladder (actual):** `0004` Gmail · `0005` memory · `0006` pending_calendar_actions (2D) ·
-> `0007` bulk/confidence columns (2D.1). Later phases continue from `0008`.
+> `0007` bulk/confidence columns (2D.1) · `0008` calendar_snapshots + commitments (2D.2). Later phases
+> continue from `0009`.
 
 **Design note (2B & 2C):** Classification, intent routing, and context resolution are **deterministic**
 (labels, thread structure, keyword heuristics, not LLM-based) — reliable, free, unit-testable. The local

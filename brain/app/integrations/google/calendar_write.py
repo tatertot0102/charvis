@@ -89,15 +89,22 @@ async def create_event(
     end: datetime,
     location: str | None = None,
     description: str | None = None,
+    recurrence: list[str] | None = None,
     account: str = "default",
 ) -> dict:
-    """Create a timed event. Returns the created event resource (id, htmlLink, …)."""
+    """Create a timed event. Returns the created event resource (id, htmlLink, …).
+
+    `recurrence` is a list of RFC 5545 lines (e.g. ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]) for a
+    repeating event; `start`/`end` are the first instance (DTSTART).
+    """
     creds = await _write_credentials(account)
     body: dict = {"summary": summary, "start": _time_field(start), "end": _time_field(end)}
     if location:
         body["location"] = location
     if description:
         body["description"] = description
+    if recurrence:
+        body["recurrence"] = recurrence
     try:
         created = await asyncio.to_thread(_insert_event, creds, body)
     except HttpError as exc:

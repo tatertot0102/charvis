@@ -7,12 +7,15 @@ from sqlalchemy import select
 
 from app import llm
 from app.config import get_settings
+from app.calendar_state import schedule
 from app.conversation import (
     calendar_handler,
+    commitment_handler,
     context_handler,
     email_handler,
     intents,
     memory_handler,
+    truth_guard,
 )
 from app.db.models import Conversation, Message
 from app.db.session import get_session
@@ -56,6 +59,8 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
             reply = await memory_handler.handle(*memory_intent)
         elif intents.is_todays_schedule_query(text):
             reply = await _todays_schedule_reply()
+        elif intents.is_week_schedule_query(text):
+            reply = await _week_schedule_reply()
         elif intents.is_free_time_query(text):
             reply = await calendar_handler.handle_free_time()
         elif context_intent is not None:
@@ -68,13 +73,23 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
             )
         ) is not None:
             # A create/move/cancel request → drafts a pending action (never a write) and returns the
-            # proposal text. None means it wasn't a calendar action; fall through to the model.
+            # proposal text. None means it wasn't a calendar action; fall through.
             reply = calendar_reply
+        elif (
+            commitment_reply := await commitment_handler.handle(
+                text, account="default", channel=channel, external_id=external_id
+            )
+        ) is not None:
+            # A commitment correction ("it is X") or recurrence statement ("it's every weekday 10–2").
+            # Updates our memory and/or drafts a CONFIRM-gated recurring create — never a silent write.
+            reply = commitment_reply
         else:
             history = await _load_recent_messages(session, conversation.id, settings.history_limit)
             prompt = [ChatMessage(role="system", content=settings.system_prompt)]
             prompt += [ChatMessage(role=m.role, content=m.content) for m in history]
-            reply = await llm.generate(prompt)
+            # THE TRUTH GUARD: this is the one branch where Jarvis took no action, so a reply that
+            # invents events or claims a calendar change is always false — replace it (Phase 2D.2).
+            reply = truth_guard.sanitize(await llm.generate(prompt))
 
         session.add(Message(conversation_id=conversation.id, role="assistant", content=reply))
         await session.commit()
@@ -98,6 +113,22 @@ async def _todays_schedule_reply() -> str:
         log.error("schedule_reply_failed", error=str(exc), error_type=type(exc).__name__)
         return "Sorry — I couldn't reach your calendar just now. Try again in a moment."
     return calendar.format_todays_events(events)
+
+
+async def _week_schedule_reply(account: str = "default") -> str:
+    """Answer a 'what's my week?' query from the snapshot cache — never the model (Phase 2D.2)."""
+    try:
+        return await schedule.week_summary(account)
+    except calendar.NotConnectedError:
+        return (
+            "I'm not connected to your Google Calendar yet. Ask me to connect (or hit "
+            "/integrations/google/connect) to grant read-only access."
+        )
+    except EncryptionUnavailableError:
+        return "I can't read your calendar yet — the encryption key isn't configured on the server."
+    except Exception as exc:  # noqa: BLE001 — friendly message to the user, detail to the logs.
+        log.error("week_reply_failed", error=str(exc), error_type=type(exc).__name__)
+        return "Sorry — I couldn't reach your calendar just now. Try again in a moment."
 
 
 async def _get_or_create_conversation(session, channel: str, external_id: str) -> Conversation:

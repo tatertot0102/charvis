@@ -43,6 +43,47 @@ def is_todays_schedule_query(text: str) -> bool:
     return any(phrase in normalized for phrase in _SCHEDULE_PHRASES)
 
 
+# A week/range schedule query. Answered deterministically from the snapshot cache (Phase 2D.2) — the
+# fix for the "invent a week" bug: these must NEVER fall through to the free-form LLM path.
+_WEEK_PHRASES: tuple[str, ...] = (
+    "whats my week",
+    "what is my week",
+    "hows my week",
+    "how does my week look",
+    "what does my week look like",
+    "whats my week look like",
+    "my week look",
+    "whats on this week",
+    "whats on my week",
+    "what do i have this week",
+    "what i have this week",
+    "have this week",
+    "what am i doing this week",
+    "doing this week",
+    "my schedule this week",
+    "schedule this week",
+    "schedule for this week",
+    "schedule for the week",
+    "whats my schedule this week",
+    "my agenda this week",
+    "agenda this week",
+    "rest of my week",
+    "rest of the week",
+    "week ahead",
+    "the week ahead",
+    "whats happening this week",
+    "whats going on this week",
+    "plans this week",
+    "whats coming up this week",
+)
+
+
+def is_week_schedule_query(text: str) -> bool:
+    """True when the message asks about the week / a multi-day range (not just today)."""
+    normalized = _normalize(text)
+    return any(phrase in normalized for phrase in _WEEK_PHRASES)
+
+
 # --- Phase 2B: email intents -------------------------------------------------
 
 
