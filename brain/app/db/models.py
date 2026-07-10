@@ -9,6 +9,10 @@ Phase 2D (calendar actions with confirmation): pending_calendar_actions — the 
 Phase 2D.2 (truthful calendar state): calendar_snapshots (provider-backed cache of real events,
 the ONLY source for week/schedule answers) and commitments (durable life understanding of recurring
 obligations — never erased by deleting a calendar event).
+Phase 2D.3 (unified truth + knowledge): knowledge_entities / entity_aliases / knowledge_facts /
+knowledge_evidence / knowledge_conflicts — the canonical, source-preserving knowledge store the
+dashboard and planner will consume — plus conversation_task_state for active-task continuity across
+follow-up messages ("this month", "LuAnn", "LuAnn Williams").
 """
 from datetime import datetime
 
@@ -443,3 +447,209 @@ class Commitment(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --- Phase 2D.3: canonical knowledge store + conversation task state ----------
+#
+# The knowledge store is the single, source-preserving model of reality that Telegram, the API, the
+# future dashboard, and the future planner all read. Every fact links to real evidence and carries a
+# truth_status; contradictions are preserved (never silently merged). It sits ALONGSIDE the existing
+# commitments/people/memory tables (which the consolidation pass reads from), not on top of them.
+
+
+class KnowledgeEntity(Base):
+    """A real-world thing Jarvis reasons about (person, project, commitment, provider event, …).
+
+    One row per (account, entity_type, normalized_name). `normalized_name` is the lowercased,
+    punctuation-collapsed identity used for resolution; `canonical_name` keeps display casing.
+    """
+
+    __tablename__ = "knowledge_entities"
+    __table_args__ = (
+        UniqueConstraint(
+            "account", "entity_type", "normalized_name", name="uq_kentity_account_type_name"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    entity_type: Mapped[str] = mapped_column(String(48), index=True)  # person|project|commitment|…
+    canonical_name: Mapped[str] = mapped_column(Text)
+    normalized_name: Mapped[str] = mapped_column(String(320), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | archived
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    aliases: Mapped[list["EntityAlias"]] = relationship(
+        back_populates="entity", cascade="all, delete-orphan"
+    )
+
+
+class EntityAlias(Base):
+    """An alternate way an entity is referenced ("LuAnn", "LuAnn Williams", "DSI", an email addr).
+
+    Alias resolution ("LuAnn" → LuAnn Williams) only fires when evidence supports it — never invents
+    a person. One row per (account, entity_id, normalized_alias).
+    """
+
+    __tablename__ = "entity_aliases"
+    __table_args__ = (
+        UniqueConstraint("account", "entity_id", "normalized_alias", name="uq_alias_entity_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    entity_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    alias: Mapped[str] = mapped_column(Text)
+    normalized_alias: Mapped[str] = mapped_column(String(320), index=True)
+    alias_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # name|email|acronym|…
+    source_type: Mapped[str] = mapped_column(String(32), default="conversation")
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    entity: Mapped["KnowledgeEntity"] = relationship(back_populates="aliases")
+
+
+class KnowledgeFact(Base):
+    """A single claim about an entity, with a truth_status and evidence (never a bare assertion).
+
+    e.g. entity=ECE ML Lab, predicate="weekday_schedule", display_value="weekdays 10–2",
+    truth_status="user_confirmed". A missing-from-calendar claim is itself a fact
+    (predicate="in_google_calendar", value="false", truth_status="provider_confirmed").
+    One row per (account, entity_id, predicate, normalized_value).
+    """
+
+    __tablename__ = "knowledge_facts"
+    __table_args__ = (
+        UniqueConstraint(
+            "account", "entity_id", "predicate", "normalized_value", name="uq_kfact_identity"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    entity_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    predicate: Mapped[str] = mapped_column(String(64), index=True)
+    normalized_value: Mapped[str] = mapped_column(Text)
+    display_value: Mapped[str] = mapped_column(Text)
+    value_type: Mapped[str] = mapped_column(String(24), default="text")  # text|time|date|bool|…
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    # provider_confirmed|user_confirmed|multi_source_confirmed|inferred|conflicted|stale|rejected|
+    # unverified
+    truth_status: Mapped[str] = mapped_column(String(24), default="unverified", index=True)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_verified: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    evidence: Mapped[list["KnowledgeEvidence"]] = relationship(
+        back_populates="fact", cascade="all, delete-orphan"
+    )
+
+
+class KnowledgeEvidence(Base):
+    """The exact provenance of a fact — the real record it came from (never a paraphrase-as-source).
+
+    `provider_object_id` holds the real Gmail message/thread id or Calendar event id where applicable,
+    so no provider fact is ever shown without a link to a real provider object.
+    """
+
+    __tablename__ = "knowledge_evidence"
+    __table_args__ = (
+        UniqueConstraint("fact_id", "dedupe_key", name="uq_kevidence_fact_dedupe"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    fact_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_facts.id", ondelete="CASCADE"), index=True
+    )
+    # calendar_event|calendar_snapshot|gmail_message|gmail_thread|user_statement|conversation_message|
+    # capture|commitment|memory_conclusion|waiting_item
+    source_type: Mapped[str] = mapped_column(String(32), index=True)
+    source_record_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # local row id
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)  # google|gmail|…
+    provider_object_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(320))  # stable identity for idempotent upsert
+    excerpt: Mapped[str] = mapped_column(Text, default="")
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    freshness_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evidence_weight: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    fact: Mapped["KnowledgeFact"] = relationship(back_populates="evidence")
+
+
+class KnowledgeConflict(Base):
+    """A preserved contradiction between two facts about the same entity+predicate.
+
+    Jarvis must EXPLAIN disagreement, not resolve it silently (Golden Rule #7 / truth principle #4):
+    "you told me weekdays 10–2 and LuAnn's email agrees, but Google Calendar shows no matching event."
+    """
+
+    __tablename__ = "knowledge_conflicts"
+    __table_args__ = (
+        UniqueConstraint(
+            "account", "entity_id", "predicate", "fact_a_id", "fact_b_id", name="uq_kconflict_pair"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    entity_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    predicate: Mapped[str] = mapped_column(String(64))
+    fact_a_id: Mapped[int] = mapped_column(ForeignKey("knowledge_facts.id", ondelete="CASCADE"))
+    fact_b_id: Mapped[int] = mapped_column(ForeignKey("knowledge_facts.id", ondelete="CASCADE"))
+    conflict_type: Mapped[str] = mapped_column(String(32))  # value|presence|schedule|…
+    explanation: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="open")  # open | resolved
+    resolved_fact_id: Mapped[int | None] = mapped_column(nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(32), nullable=True)  # user|provider|…
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ConversationTaskState(Base):
+    """The active task carried across follow-up messages — the cure for lost continuity.
+
+    "Check my email for upcoming events." → "LuAnn." → "LuAnn Williams." must refine ONE task, not
+    start three unrelated chats. One row per conversation; refreshed each turn, expired after a window.
+    """
+
+    __tablename__ = "conversation_task_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    active_intent: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    active_entity_id: Mapped[int | None] = mapped_column(nullable=True)
+    active_person_name: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    active_source_types: Mapped[list] = mapped_column(JSON, default=list)
+    active_time_range: Mapped[dict] = mapped_column(JSON, default=dict)  # {type,start,end}
+    active_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unresolved_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

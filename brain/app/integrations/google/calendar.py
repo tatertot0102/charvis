@@ -21,6 +21,7 @@ from app.telemetry import get_logger
 log = get_logger(__name__)
 
 MAX_EVENTS = 50
+MAX_PAGES = 10  # hard cap on pagination (≤ MAX_EVENTS × MAX_PAGES events) so a range read is bounded
 _PRIMARY_CALENDAR = "primary"
 
 
@@ -197,21 +198,34 @@ async def list_events_window(
 
 
 def _fetch_events_range(creds: Credentials, tz: ZoneInfo, start: datetime, end: datetime) -> list[dict]:
-    """Events overlapping an explicit [start, end] window. Run via asyncio.to_thread."""
+    """Events overlapping an explicit [start, end] window. Run via asyncio.to_thread.
+
+    Paginated: a wide window (e.g. a whole month) can exceed a single page of MAX_EVENTS. Without this
+    the read silently truncated and a month answer would omit real events — a truthfulness bug, not
+    just a UX one (Phase 2D.3 §8). Bounded by MAX_PAGES so it can never run away.
+    """
     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-    response = (
-        service.events()
-        .list(
-            calendarId=_PRIMARY_CALENDAR,
-            timeMin=start.astimezone(UTC).isoformat(),
-            timeMax=end.astimezone(UTC).isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-            maxResults=MAX_EVENTS,
+    items: list[dict] = []
+    page_token: str | None = None
+    for _ in range(MAX_PAGES):
+        response = (
+            service.events()
+            .list(
+                calendarId=_PRIMARY_CALENDAR,
+                timeMin=start.astimezone(UTC).isoformat(),
+                timeMax=end.astimezone(UTC).isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=MAX_EVENTS,
+                pageToken=page_token,
+            )
+            .execute()
         )
-        .execute()
-    )
-    return response.get("items", [])
+        items.extend(response.get("items", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+    return items
 
 
 async def list_events_range(

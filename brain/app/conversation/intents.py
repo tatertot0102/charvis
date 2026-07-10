@@ -7,6 +7,8 @@ never needs Gmail-specific commands — natural phrasing maps to the right read 
 import re
 from enum import Enum
 
+from app.query import ranges
+
 _STRIP_PUNCT = re.compile(r"[^a-z0-9\s]")
 
 # Apostrophe-free phrases (normalization strips punctuation, so "what's" → "whats").
@@ -338,4 +340,119 @@ def detect_memory_intent(text: str) -> tuple[MemoryIntent, str | None] | None:
         return (MemoryIntent.PROJECTS, None)
     if any(phrase in normalized for phrase in _KNOW_PHRASES):
         return (MemoryIntent.KNOW_ABOUT_ME, None)
+    return None
+
+
+# --- Phase 2D.3: schedule-range, calendar-verification, email-event-search ----
+#
+# These fix three of the routing defects that funnelled real questions into the raw LLM:
+#   R1  "what does my month look like"        → a ranged schedule read (not the LLM)
+#   R4  "is this in my Google Calendar?"      → a provider verification (not a guess)
+#   R3  "check my email for upcoming events"  → a Gmail event search (not list_unread)
+
+# Generic "asking about my schedule/agenda" phrasing, range-agnostic. Paired with a parsed range so a
+# fresh "what do I have next week" routes deterministically. Today/this-week keep their own matchers.
+_SCHEDULE_INTENT_PHRASES = (
+    "schedule", "agenda", "on my calendar", "on the calendar", "my calendar",
+    "what do i have", "what have i got", "what am i doing", "what i have", "whats on",
+    "whats happening", "whats going on", "coming up", "look like", "any events", "any plans",
+    "anything on", "anything going on", "anything happening", "what are my plans", "my plans",
+    "do i have anything", "have anything", "what does my",
+)
+
+
+def _has_schedule_intent(normalized: str) -> bool:
+    return any(phrase in normalized for phrase in _SCHEDULE_INTENT_PHRASES)
+
+
+def detect_schedule_range(text: str) -> ranges.TimeRange | None:
+    """A ranged schedule query ("what do I have next week/this month/tomorrow"), else None.
+
+    Requires BOTH a schedule-intent phrase and a parseable range so plain statements that merely
+    mention a month ("remind me next month") don't get treated as schedule reads. Today/this-week are
+    left to their dedicated matchers; only other ranges are returned here.
+    """
+    normalized = _normalize(text)
+    if not _has_schedule_intent(normalized):
+        return None
+    time_range = ranges.parse_range(text)
+    if time_range is None or time_range.key in ("today", "this_week"):
+        return None
+    return time_range
+
+
+# A read-only verification question about the calendar ("is X on my calendar?"). Distinct from a
+# calendar ACTION (add/move/delete) — those carry an action verb and route to the action handler.
+_VERIFY_SUBJECT_RES = (
+    re.compile(r"\b(?:is|are|was|were)\s+(.+?)\s+(?:on|in|already on|actually on)\s+my\s+"
+               r"(?:google\s+)?calendar\b"),
+    re.compile(r"\bdo(?:es)?\s+(?:i|my calendar)\s+have\s+(.+?)\s+(?:on|in|scheduled)\b"),
+    re.compile(r"\b(?:did|have)\s+you\s+(?:actually\s+)?(?:add|schedule|create|put)\s+(.+?)\s+"
+               r"(?:on|to|in)\s+my\s+(?:google\s+)?calendar\b"),
+    re.compile(r"\bis\s+(.+?)\s+(?:actually\s+)?scheduled\b"),
+)
+# Bare "is this/that/it on my calendar?" — the subject comes from conversation context, not the text.
+_VERIFY_BARE_RE = re.compile(
+    r"\b(?:is|are)\s+(?:this|that|it)\s+(?:actually\s+)?(?:on|in)\s+my\s+(?:google\s+)?calendar\b"
+)
+_VERIFY_MARKERS = ("on my calendar", "in my calendar", "on my google calendar", "in my google calendar")
+# A verification is a yes/no QUESTION — it must open with one of these. Guards against declarative
+# statements ("my lab is on my calendar every weekday") being misread as a check.
+_VERIFY_LEAD_WORDS = frozenset(
+    {"is", "are", "was", "were", "do", "does", "did", "have", "has", "can", "could", "should"}
+)
+
+
+def detect_calendar_verification(text: str) -> tuple[bool, str | None] | None:
+    """Detect "is X on my calendar?" → (True, subject|None); None if it isn't a verification question."""
+    normalized = _normalize(text)
+    if not any(marker in normalized for marker in _VERIFY_MARKERS) and "scheduled" not in normalized:
+        return None
+    tokens = normalized.split()
+    if not tokens or tokens[0] not in _VERIFY_LEAD_WORDS:
+        return None  # not phrased as a question — leave it to statement handlers / the LLM
+    if _VERIFY_BARE_RE.search(normalized):
+        return (True, None)
+    for pattern in _VERIFY_SUBJECT_RES:
+        match = pattern.search(normalized)
+        if match:
+            subject = _clean_subject(match.group(1).strip())
+            return (True, subject)
+    # A question with a marker but no clean subject → verify, resolving the subject from context.
+    if any(marker in normalized for marker in _VERIFY_MARKERS):
+        return (True, None)
+    return None
+
+
+# Searching EMAIL specifically for events/invitations — must beat the generic "check my email"→unread.
+_EVENT_TOKENS = (
+    "event", "events", "invite", "invites", "invitation", "invitations", "rsvp",
+)
+_EMAIL_TOKENS = ("email", "emails", "inbox", "gmail", "mailbox")
+_EMAIL_SEARCH_MARKERS = (
+    "check", "search", "look", "scan", "find", "go through", "any", "for", "upcoming", "in my",
+    "through my",
+)
+_PERSON_SCOPE_RE = re.compile(r"\bfrom\s+(.+?)(?:\s+(?:in|about|regarding|for|on)\b|$)")
+
+
+def _extract_person_scope(normalized: str) -> str | None:
+    match = _PERSON_SCOPE_RE.search(normalized)
+    if not match:
+        return None
+    return _clean_name(match.group(1).strip())
+
+
+def detect_email_event_search(text: str) -> tuple[bool, str | None] | None:
+    """Detect "check my email for events/invitations" → (True, person|None); None otherwise.
+
+    Requires an email token AND an event/invite token AND a search cue, so plain "check my email"
+    still routes to unread and only an explicit event hunt lands here (root-cause R3).
+    """
+    normalized = _normalize(text)
+    has_email = any(t in normalized for t in _EMAIL_TOKENS)
+    has_event = any(t in normalized for t in _EVENT_TOKENS)
+    searchy = any(m in normalized for m in _EMAIL_SEARCH_MARKERS)
+    if has_email and has_event and searchy:
+        return (True, _extract_person_scope(normalized))
     return None
