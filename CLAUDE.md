@@ -343,7 +343,23 @@ the frontend.
     always uses account `default`), so running the conversation suite writes commitment/knowledge
     fixtures into `default` — purge them before relying on live reads.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
-  - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
+  - **2F.0 (DONE — command center, tag `phase-2f0-verified`):** Dashboard Foundation + Command Center.
+    React+Vite+TS SPA in `dashboard/`, dark-first, served **same-origin** by the brain (multi-stage
+    Docker build bakes the SPA into `/app/dashboard_dist`; `app.main._mount_spa` serves it at `/` with
+    the shared token injected — single-user Tailscale). Backend `app/dashboard/` aggregates the SAME
+    WorldModel + services (no second truth system): `GET /dashboard/state` (mode/hero/priority/today/
+    working-memory/notifications/approvals/sources), `GET/POST /dashboard/layout` (validated
+    LayoutCommands — approvals can NEVER be hidden), `GET /dashboard/entity/{type}/{id}`. **Deterministic
+    modes** (Idle/Pre-event/Travel/Deep Work/Deadline/Crisis) via `app/dashboard/modes.py` — no
+    LLM-generated layouts. **User focus** re-ranks emphasis but never hides urgent objective facts.
+    Truth badges (Verified/Remembered/Likely/Inferred/Conflicted). Floating Jarvis panel → chat/query +
+    validated layout commands. Detail routes /memory /people /projects /commitments /sources /events/:id
+    /people/:id /projects/:id. Weather/transit/news/todoist/browser/device shown as source-registry
+    PLACEHOLDERS only. Approve/reject go through the existing confirmation-gated `/approvals`. Migration
+    `0010` (dashboard_prefs, visual-state only). 394 backend + 5 frontend tests green; live-verified
+    read-only against the real account (real events/emails, deterministic mode, no fabrication).
+    Tailscale-from-phone/Pro/Air verification is manual (browse `http://<tailscale-host>:8000/`).
+  - **2F — Dashboard (next slices):** live context strip, richer detail pages, layout drag-reorder.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).
     `/ingest/{source}`, `/state/context`.
 - **Phase 3 — Think.** Planner (§6): decomposition, priority model, scheduling into free

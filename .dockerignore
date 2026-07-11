@@ -1,0 +1,12 @@
+# Build context is the repo root — keep the image lean and never bake secrets or local artifacts.
+.git
+.env
+**/__pycache__
+**/*.pyc
+brain/.venv
+dashboard/node_modules
+dashboard/dist
+**/.pytest_cache
+**/.ruff_cache
+**/*.log
+scratchpad

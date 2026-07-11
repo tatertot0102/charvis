@@ -16,7 +16,10 @@ services:
     # Not published to the host — only the brain (on the compose network) reaches Postgres.
 
   brain:
-    build: ./brain
+    build:
+      # Repo root context so the multi-stage build can reach both brain/ and dashboard/.
+      context: .
+      dockerfile: brain/Dockerfile
     container_name: jarvis-brain
     env_file: .env
     ports:
