@@ -100,10 +100,21 @@ async def test_disconnected_calendar_is_reported_honestly(monkeypatch):
     llm = _LLMSpy()
     monkeypatch.setattr(conv_service.llm, "generate", llm.generate)
 
-    async def disconnected(account="default"):
-        return SourceReport(name=CALENDAR, status=SourceStatus.DISCONNECTED, detail="")
+    async def allr(account="default"):
+        return {
+            CALENDAR: SourceReport(name=CALENDAR, status=SourceStatus.DISCONNECTED, detail=""),
+            GMAIL: SourceReport(name=GMAIL, status=SourceStatus.DISCONNECTED, detail=""),
+        }
 
-    monkeypatch.setattr(registry, "calendar_report", disconnected)
+    async def down(start, end, account="default"):
+        raise calendar_mod.NotConnectedError("not connected")
+
+    async def no_mail(query, account="default", max_results=25):
+        return []
+
+    monkeypatch.setattr(registry, "all_reports", allr)
+    monkeypatch.setattr(calendar_mod, "list_events_range", down)
+    monkeypatch.setattr(gmail_mod, "search", no_mail)
 
     reply, _ = await conv_service.handle_incoming("telegram", _user(), "what does my month look like")
     assert llm.calls == 0

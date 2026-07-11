@@ -95,3 +95,41 @@ class WorldModel:
 
     def has_facts(self) -> bool:
         return bool(self.all_facts())
+
+    def to_dict(self) -> dict:
+        """JSON-serializable form — what the dashboard consumes (same WorldModel, no extra logic)."""
+        def fact(f: Fact) -> dict:
+            return {
+                "kind": f.kind, "reality": f.reality.value, "text": f.text, "source": f.source,
+                "entity": f.entity, "provider": f.provider,
+                "provider_object_id": f.provider_object_id, "confidence": f.confidence,
+                "when": f.when.isoformat() if f.when else None,
+            }
+
+        return {
+            "intent": self.intent,
+            "query_text": self.query_text,
+            "date_range": [d.isoformat() for d in self.date_range] if self.date_range else None,
+            "entities": [
+                {"canonical_name": e.canonical_name, "entity_type": e.entity_type,
+                 "aliases": list(e.aliases)} for e in self.entities
+            ],
+            "events": [fact(f) for f in self.events],
+            "emails": [fact(f) for f in self.emails],
+            "commitments": [fact(f) for f in self.commitments],
+            "memory": [fact(f) for f in self.memory],
+            "patterns": [fact(f) for f in self.patterns],
+            "waiting": [fact(f) for f in self.waiting],
+            "messages": [fact(f) for f in self.messages],
+            "conflicts": [
+                {"entity": c.entity, "kind": c.kind, "explanation": c.explanation}
+                for c in self.conflicts
+            ],
+            "sources": {
+                name: {"status": r.status.value, "connected": r.connected, "detail": r.detail}
+                for name, r in self.sources.items()
+            },
+            "confidence": self.confidence,
+            "missing_information": self.missing_information,
+            "unknowns": self.unknowns,
+        }

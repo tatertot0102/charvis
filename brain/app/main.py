@@ -10,6 +10,7 @@ from app.api.chat import router as chat_router
 from app.api.gmail import router as gmail_router
 from app.api.google_oauth import router as google_oauth_router
 from app.api.health import router as health_router
+from app.api.knowledge import router as knowledge_router
 from app.api.memory import router as memory_router
 from app.api.state import router as state_router
 from app.config import get_settings
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(state_router)
     app.include_router(memory_router)
     app.include_router(approvals_router)
+    app.include_router(knowledge_router)
     log.info("brain_started", app_env=settings.app_env, llm_provider=settings.local_llm_provider)
     return app
 

@@ -17,9 +17,16 @@ from app.db.session import get_session
 from app.knowledge.model import EntityRef
 
 _STRIP_PUNCT = re.compile(r"[^a-z0-9\s]")
-# Tokens too generic to be a useful match term on their own.
-_STOPWORDS = frozenset({"the", "a", "an", "my", "of", "for", "to", "on", "in", "lab", "meeting",
-                        "event", "class", "session", "dr", "mr", "mrs", "ms"})
+# Tokens too generic to be a useful match term on their own — a bare "with" or "the" as a match term
+# causes false positives (e.g. matching a calendar event's description). Function words + a few
+# domain-generic nouns.
+_STOPWORDS = frozenset({
+    "the", "a", "an", "my", "your", "our", "of", "for", "to", "on", "in", "at", "by", "with",
+    "and", "or", "but", "is", "are", "was", "were", "be", "am", "do", "does", "did", "this",
+    "that", "these", "those", "it", "its", "as", "from", "about", "into", "you", "me", "we",
+    "us", "they", "them", "up", "out", "off", "so", "if", "any", "all", "new", "get", "got",
+    "lab", "meeting", "event", "class", "session", "appointment", "dr", "mr", "mrs", "ms",
+})
 
 
 def normalize(name: str) -> str:

@@ -320,7 +320,7 @@ the frontend.
     them with a safe message; Jarvis says "I updated your schedule" ONLY after proposal→CONFIRM→write→
     snapshot rebuild. Deleting a calendar event NEVER erases a commitment. Migration `0008`. Read-mostly:
     no email sends; all writes still draft-then-confirm.
-  - **2D.3 (a done; b–d engine landed, live-verify pending):** Unified Truth + Knowledge Engine.
+  - **2D.3 (DONE — integrated + live-verified, tag `phase-2d3-integrated`):** Unified Truth + Knowledge Engine.
     Migration `0009` (knowledge_entities/entity_aliases/knowledge_facts/knowledge_evidence/
     knowledge_conflicts + conversation_task_state). **2D.3a (truth routing core):** `app/query/`
     (ranges, StructuredAnswer, hardened validator), `app/sources/registry` (live capability truth),
@@ -332,11 +332,16 @@ the frontend.
     Inferred — never mixed), **canonical entity resolution** with permanent aliases (corrections like
     "it is ECE Machine Learning Lab" alias the old name forever), **conflict detection** (a remembered
     recurring commitment the calendar can't confirm is surfaced, never hidden), live source status, and
-    confidence. Schedule + "what is X / what is X related to / what do you know about X" route through
-    the engine; the conversation layer is a thin adapter; the future dashboard consumes the same
-    WorldModel. Automated tests are mocked (375 green); **live verification against the real Google
-    account and the `phase-2d3-integrated` tag are DEFERRED until Google is connected** (dev account
-    currently unconnected). No new external integrations; calendar writes still draft-then-confirm.
+    confidence. Schedule, verification, email-event search, and "what is X / what is X related to /
+    what do you know about X" all route through the engine; `verify_handler`/`email_event_handler` are
+    thin engine adapters; the dashboard consumes the same WorldModel via **`POST /query` +
+    `GET /knowledge/{sources,entities}`**. Gmail event search cross-checks the calendar (flags "already
+    on your calendar"); verify uses strict title-token matching (no false positives). **Live-verified
+    against the real Google account** (all 9 behaviors; delete→reflect guaranteed by snapshot
+    rebuild-then-read). Automated tests mocked (378 green), ruff clean, migration 0009. No new external
+    integrations; calendar writes still draft-then-confirm. **Test caveat:** single-account system (chat
+    always uses account `default`), so running the conversation suite writes commitment/knowledge
+    fixtures into `default` — purge them before relying on live reads.
   - **2E — Todoist read:** Tasks, projects, due dates. `/todoist/tasks`, `/todoist/upcoming`.
   - **2F — Dashboard:** Read-only React SPA. Today + waiting-on + deadlines + next-action views.
   - **2G — Device context:** mac-agent (running apps), chrome-ext (tabs), android-tasker (location/battery).

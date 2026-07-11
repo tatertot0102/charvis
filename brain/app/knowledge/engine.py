@@ -55,7 +55,7 @@ async def query(
     start, end = (date_range or (None, None))
     q = Query(
         intent=intent, account=account, start=start, end=end, text=text,
-        terms=terms, person=person,
+        terms=terms, person=person, require_all=(intent == "verify"),
     )
 
     provider_names = _INTENT_PROVIDERS.get(intent, _DEFAULT_PROVIDERS)
@@ -75,6 +75,8 @@ async def query(
     world.sources = reports
     _merge(world, facts, minimum_confidence)
     _dedupe_events(world)
+    if intent == "email_events":
+        _crosscheck_emails(world)
     world.conflicts = _detect_conflicts(world, refs, terms)
     world.confidence = _confidence(world)
     world.missing_information = _missing(world, reports, intent, verify)
@@ -152,6 +154,25 @@ def _detect_conflicts(
             )
         )
     return conflicts
+
+
+def _crosscheck_emails(world: WorldModel) -> None:
+    """Flag email invitations whose event already appears on the calendar (deep-intel cross-check).
+
+    A LIKELY email invitation that matches a VERIFIED calendar event is context, not a new to-do —
+    the annotation keeps the two realities honest instead of double-counting.
+    """
+    for email in world.emails:
+        subject = (email.data.get("subject") or "").lower()
+        tokens = [t for t in entity_resolver.significant_tokens(subject) if len(t) > 3]
+        if not tokens:
+            continue
+        for event in world.events:
+            hay = (str(event.data.get("summary", "")) + " " + event.text).lower()
+            hits = sum(1 for t in tokens if t in hay)
+            if hits and hits >= max(1, len(tokens) // 2):
+                email.data["on_calendar"] = event.provider_object_id
+                break
 
 
 def _event_mentions(event: Fact, entity: str, tokens: list[str]) -> bool:

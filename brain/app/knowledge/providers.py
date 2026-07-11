@@ -45,10 +45,16 @@ class Query:
     terms: list[str] = field(default_factory=list)  # entity match terms (lowercased); empty = no filter
     person: str | None = None
     gmail_limit: int = 25
+    require_all: bool = False  # verify: an event must contain ALL significant tokens (strict), title-only
 
     @property
     def scoped(self) -> bool:
         return bool(self.terms)
+
+    @property
+    def token_terms(self) -> list[str]:
+        """Single-word match terms only (drops multi-word phrases) — used for strict AND-matching."""
+        return [t for t in self.terms if " " not in t]
 
 
 def _tz() -> ZoneInfo:
@@ -98,9 +104,16 @@ class CalendarProvider:
         for ev in events:
             if not ev.event_id:
                 continue
-            haystack = f"{ev.summary} {ev.description} {' '.join(ev.attendees)} {ev.location or ''}"
-            if not _text_matches(haystack, q.terms):
-                continue
+            if q.require_all:
+                # Strict verification: every significant token must be in the TITLE (not the
+                # description) so "is X on my calendar?" can't match on a stray word.
+                summary_norm = normalize(ev.summary)
+                if not q.token_terms or not all(t in summary_norm for t in q.token_terms):
+                    continue
+            else:
+                haystack = f"{ev.summary} {ev.description} {' '.join(ev.attendees)} {ev.location or ''}"
+                if not _text_matches(haystack, q.terms):
+                    continue
             facts.append(
                 Fact(
                     kind="event", reality=Reality.VERIFIED,
@@ -176,7 +189,11 @@ class GmailProvider:
         if q.person:
             parts.append(f'(from:{q.person} OR "{q.person}")')
         elif q.terms:
-            parts.append("(" + " OR ".join(f'"{t}"' for t in q.terms) + ")")
+            # Prefer the full entity phrase(s) over single tokens — searching bare "applications"
+            # dredges up unrelated mail; "college applications" as a phrase stays on-topic.
+            phrases = [t for t in q.terms if " " in t]
+            chosen = phrases or q.terms
+            parts.append("(" + " OR ".join(f'"{t}"' for t in chosen) + ")")
         if q.intent in ("schedule", "email_events"):
             parts.append(_EVENT_QUERY)
         parts.append("newer_than:180d")

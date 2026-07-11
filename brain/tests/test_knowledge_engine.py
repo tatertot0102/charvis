@@ -1,4 +1,5 @@
 """Unit tests for the Unified Knowledge Engine + entity resolution (Phase 2D.3 integration)."""
+import uuid
 from datetime import UTC, datetime
 
 
@@ -95,19 +96,20 @@ async def test_minimum_confidence_moves_low_facts_to_unknowns(monkeypatch):
 
 
 async def test_record_correction_aliases_old_name_forever():
-    # "It is ECE Machine Learning Lab" when the prior referent was "ARISE".
-    ref = await entities.record_correction("ARISE", "ECE Machine Learning Lab")
+    # Unique account so tests never pollute the real "default" account with fixtures.
+    acct = f"kt-{uuid.uuid4()}"
+    ref = await entities.record_correction("ARISE", "ECE Machine Learning Lab", account=acct)
     assert ref.canonical_name == "ECE Machine Learning Lab"
-    resolved = await entities.resolve_name("ARISE")
+    resolved = await entities.resolve_name("ARISE", acct)
     assert resolved is not None
     assert resolved.canonical_name == "ECE Machine Learning Lab"
 
 
 async def test_resolve_unknown_name_returns_none():
-    assert await entities.resolve_name("totally-unknown-thing-xyz") is None
+    assert await entities.resolve_name("totally-unknown-thing-xyz", f"kt-{uuid.uuid4()}") is None
 
 
 async def test_match_terms_includes_aliases():
-    ref = await entities.record_correction("DSI", "Data Science Institute")
+    ref = await entities.record_correction("DSI", "Data Science Institute", account=f"kt-{uuid.uuid4()}")
     terms = entities.match_terms("DSI", ref)
     assert "dsi" in terms and "data science institute" in terms
