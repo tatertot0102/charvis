@@ -16,6 +16,7 @@ from app.conversation import (
     email_handler,
     intents,
     knowledge_handler,
+    life_handler,
     memory_handler,
     schedule_range_handler,
     task_state,
@@ -57,6 +58,7 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
         verify_intent = intents.detect_calendar_verification(text)
         schedule_range = intents.detect_schedule_range(text)
         entity_subject = intents.detect_entity_query(text)
+        life_query = intents.detect_life_query(text)
         bulk_phrase = intents.bulk_confirm_phrase(text)
         if bulk_phrase is not None:
             # "CONFIRM DELETE"/"CONFIRM MOVE" — the stronger phrase a bulk action requires.
@@ -74,6 +76,10 @@ async def handle_incoming(channel: str, external_id: str, text: str) -> tuple[st
                 session, conversation.id, intent="entity_query",
                 query=text, unresolved_reference=entity_subject,
             )
+        elif life_query is not None:
+            # "what should I focus on / what do I do every weekday" — reason over the whole life
+            # model (priorities, routines, commitments), grounded, never a raw calendar dump.
+            reply = await life_handler.handle(life_query)
         elif memory_intent is not None:
             reply = await memory_handler.handle(*memory_intent)
         elif email_event is not None:

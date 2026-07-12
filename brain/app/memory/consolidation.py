@@ -30,6 +30,14 @@ async def consolidate(account: str = "default", sync_first: bool = True) -> Pers
     signals = await gather.gather(account)
     memory = derive.derive(signals)
     result = await store.persist(memory, account)
+    # Phase 2D.4: refresh the connected life graph from the same derivation. Guarded — a graph
+    # hiccup must never sink the (already-persisted) memory it was built from.
+    try:
+        from app.lifemodel import build
+
+        await build.rebuild(memory, account)
+    except Exception as exc:  # noqa: BLE001
+        log.error("lifegraph_rebuild_failed", error=str(exc), error_type=type(exc).__name__)
     log.info("memory_consolidated", account=account, conclusions=result.conclusions)
     return result
 

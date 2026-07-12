@@ -84,6 +84,7 @@ async def _gather_events(account: str) -> list[EventSignal]:
             event_id=e.event_id or e.summary,
             summary=e.summary,
             start=e.start,
+            end=e.end,
             location=e.location,
             attendees=e.attendees,
             description=e.description,

@@ -7,7 +7,7 @@ truncates) and every other relevant provider; the renderer turns the merged Worl
 """
 from __future__ import annotations
 
-from app import knowledge
+from app import knowledge, reasoning
 from app.knowledge import render
 from app.query.ranges import TimeRange
 from app.telemetry import get_logger
@@ -27,4 +27,7 @@ async def handle(text: str, time_range: TimeRange, account: str = "default") -> 
     except Exception as exc:  # noqa: BLE001 — friendly to user, detail to logs.
         log.error("schedule_range_failed", error=str(exc), error_type=type(exc).__name__)
         return "Sorry — I couldn't reach your calendar just now. Try again in a moment."
-    return render.explain_schedule(world, time_range.label)
+    return await reasoning.narrate(
+        world, kind="schedule", question=text, account=account, label=time_range.label,
+        fallback=lambda: render.explain_schedule(world, time_range.label),
+    )

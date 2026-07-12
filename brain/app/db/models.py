@@ -477,6 +477,13 @@ class KnowledgeEntity(Base):
     canonical_name: Mapped[str] = mapped_column(Text)
     normalized_name: Mapped[str] = mapped_column(String(320), index=True)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | archived
+    # --- Phase 2D.4 reasoning attributes (derived, evidence-backed; never bare) ---
+    inferred_role: Mapped[str | None] = mapped_column(Text, nullable=True)  # "ARISE coordinator", …
+    importance: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0–1.0, from evidence + activity
+    evidence_count: Mapped[int] = mapped_column(default=0)  # supporting records across all sources
+    last_reasoned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -626,6 +633,39 @@ class KnowledgeConflict(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class EntityRelation(Base):
+    """A typed, evidence-counted edge between two knowledge entities (Phase 2D.4 Life Graph).
+
+    This is what makes the life model a *graph* rather than a bag of nodes: person —works_on→ project,
+    project —contains→ commitment, project —involves→ person. Every edge is grounded — `evidence_count`
+    is the number of shared source records (emails/events) that justify it, and confidence tracks that.
+    One row per (account, src_entity_id, dst_entity_id, relation_type); rebuild upserts, never dupes.
+    """
+
+    __tablename__ = "entity_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "account", "src_entity_id", "dst_entity_id", "relation_type", name="uq_erel_identity"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account: Mapped[str] = mapped_column(String(255), default="default", index=True)
+    src_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    dst_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    relation_type: Mapped[str] = mapped_column(String(48), index=True)  # works_on|contains|involves|…
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    evidence_count: Mapped[int] = mapped_column(default=0)  # shared source records justifying the edge
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DashboardPref(Base):

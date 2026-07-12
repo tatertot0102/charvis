@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app import knowledge
+from app import knowledge, reasoning
 from app.config import get_settings
 from app.knowledge import render
 from app.telemetry import get_logger
@@ -37,4 +37,7 @@ async def handle(subject: str | None, account: str = "default") -> str:
     except Exception as exc:  # noqa: BLE001 — friendly to user, detail to logs.
         log.error("verify_failed", error=str(exc), error_type=type(exc).__name__)
         return _ERROR
-    return render.explain_verify(world, subject)
+    return await reasoning.narrate(
+        world, kind="verify", question=subject, account=account,
+        fallback=lambda: render.explain_verify(world, subject),
+    )

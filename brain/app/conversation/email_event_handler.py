@@ -8,7 +8,7 @@ honestly rather than inventing events.
 """
 from __future__ import annotations
 
-from app import knowledge
+from app import knowledge, reasoning
 from app.knowledge import render
 from app.telemetry import get_logger
 
@@ -26,4 +26,7 @@ async def handle(text: str, person: str | None = None, account: str = "default")
     except Exception as exc:  # noqa: BLE001 — friendly to user, detail to logs.
         log.error("email_event_search_failed", error=str(exc), error_type=type(exc).__name__)
         return _ERROR
-    return render.explain_email_events(world, person)
+    return await reasoning.narrate(
+        world, kind="email_events", question=text, account=account,
+        fallback=lambda: render.explain_email_events(world, person),
+    )

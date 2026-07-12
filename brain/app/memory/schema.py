@@ -67,6 +67,7 @@ class DerivedConclusion:
     confidence: float
     evidence: Evidence
     contexts: tuple[str, ...] = ()  # context names this entity belongs to (overlapping)
+    display_name: str | None = None  # human label for graph nodes (a person's name vs their email)
 
 
 @dataclass(frozen=True)

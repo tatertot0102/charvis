@@ -33,6 +33,7 @@ class EventSignal:
     location: str | None
     attendees: tuple[str, ...]
     description: str
+    end: datetime | None = None  # for routine time-window phrasing (Phase 2D.4)
 
 
 @dataclass(frozen=True)

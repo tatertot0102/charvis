@@ -484,6 +484,30 @@ _ENTITY_STOP_LEAD = frozenset(
 )
 
 
+# Broad self-questions about priorities, focus, and routines — answered by reasoning over the whole
+# life model rather than a single entity or a raw calendar read (Phase 2D.4).
+_LIFE_QUERY_RES = (
+    re.compile(r"what should i (?:focus on|work on|prioriti|do (?:next|today|this week|first))"),
+    re.compile(r"what (?:are|is) my (?:priorit|main focus|current focus|projects?)"),
+    re.compile(r"what (?:am i|are we) (?:working on|focused on)"),
+    re.compile(r"what matters (?:most|right now)"),
+    re.compile(r"what (?:do i|should i) (?:usually |typically )?do (?:every|on|most) \w*day"),
+    re.compile(r"what(?:'?s| is) my (?:daily |weekly |typical |usual )?routine"),
+    re.compile(r"what does my (?:typical|usual|average) (?:week|day) look like"),
+    re.compile(r"what(?:'?s| is) important (?:to me|right now)"),
+)
+
+
+def detect_life_query(text: str) -> str | None:
+    """Return the question when it's a broad 'what should I focus on / what do I do every weekday'
+    style life question, else None. These route through grounded reasoning over the life model."""
+    normalized = _normalize(text)
+    for pattern in _LIFE_QUERY_RES:
+        if pattern.search(normalized):
+            return text.strip()
+    return None
+
+
 def detect_entity_query(text: str) -> str | None:
     """Extract the entity a "what is X / what is X related to / what do you know about X" asks about.
 

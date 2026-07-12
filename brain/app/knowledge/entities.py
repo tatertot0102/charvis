@@ -101,6 +101,11 @@ async def _load_aliases(session, entity_id: int, account: str) -> list[str]:
     return list(rows)
 
 
+async def list_aliases(session, entity_id: int, account: str = "default") -> list[str]:
+    """Public: every alias string attached to an entity (order not guaranteed)."""
+    return await _load_aliases(session, entity_id, account)
+
+
 async def resolve_name(name: str, account: str = "default") -> EntityRef | None:
     """Resolve a mention to its canonical entity (via alias or canonical name), or None if unknown."""
     norm = normalize(name)

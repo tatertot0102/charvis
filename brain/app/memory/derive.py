@@ -131,6 +131,7 @@ def derive_people(signals: Signals) -> list[DerivedConclusion]:
                 confidence=confidence.score(evidence),
                 evidence=evidence,
                 contexts=tuple(sorted(ctx.keys())),
+                display_name=person.name or None,
             )
         )
     conclusions.sort(key=lambda c: c.confidence, reverse=True)

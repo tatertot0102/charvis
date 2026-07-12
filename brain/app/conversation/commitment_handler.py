@@ -20,6 +20,7 @@ from app.commitments import store as commitments
 from app.commitments.parse import RecurrenceSpec
 from app.config import get_settings
 from app.knowledge import entities
+from app.reasoning import reconcile
 from app.telemetry import get_logger
 
 log = get_logger(__name__)
@@ -66,6 +67,7 @@ async def _handle_naming(title: str, account: str) -> str:
         )
     except Exception as exc:  # noqa: BLE001 — an alias-store hiccup must never break the reply.
         log.warning("record_correction_failed", error=str(exc))
+    await reconcile.note_correction(account, title)  # fold the correction into the life graph
     return (
         f"Got it — I'll remember this as “{title}”. "
         "(I've noted that for myself; I haven't changed anything on your calendar.)"
@@ -129,6 +131,11 @@ async def _handle_recurrence(
         recurrence=spec.rrule,
         confidence=0.7,
         evidence_source="conversation",
+    )
+    # Fold the stated schedule into the life graph as a Remembered, evidence-backed fact so the
+    # reasoning layer + dashboard reflect it immediately (the calendar create still needs CONFIRM).
+    await reconcile.note_commitment(
+        account, title, schedule_summary=spec.summary, recurrence=spec.rrule
     )
 
     tz = _tz()
